@@ -1,0 +1,26 @@
+{
+  "planId": "plan-1773405993424-fp31vtq",
+  "sessionId": "session-1773213495730-q26rsj0",
+  "missionId": "turn:1773405993419-7vfojny",
+  "turnId": "turn:1773405993419-7vfojny",
+  "version": 1,
+  "mode": "standard",
+  "status": "completed",
+  "source": "orchestrator",
+  "promptDigest": "帮我搞定我的codex插件用不了的问题 Reconnecting... 1/5 unexpected status 401 Unauthorized: 无效的令牌 (request id: 202603132046032046358343EWyuWxv), url: https://api.kxaug.xyz/v1/responses Reconnecting... 2/5 Reconnecting... 3/5 Reconnecting... 4/5 Reconnectin...",
+  "summary": "帮我搞定我的codex插件用不了的问题  Reconnecting... 1/5\nunexpected status 401 Unauthorized: 无效的令牌 (request id: 202603132046032046358343EWyuWxv), url: https://api.kxaug.xyz/v1/responses\nReconnecting... 2/5\nReconnecting... 3/5\nReconnecting... 4/5\nReconnecting... 5/5\nunexpected status 401 Unauthorized: 无效的令牌 (request id: 20260313204623790998083vXFUcYPH), url: https://api.kxaug.xyz/v1/responses",
+  "acceptanceCriteria": [],
+  "constraints": [],
+  "items": [],
+  "links": {
+    "assignmentIds": [],
+    "todoIds": []
+  },
+  "createdAt": 1773405993424,
+  "updatedAt": 1773406134206,
+  "review": {
+    "status": "approved",
+    "reviewer": "system:auto",
+    "reviewedAt": 1773405993427
+  }
+}

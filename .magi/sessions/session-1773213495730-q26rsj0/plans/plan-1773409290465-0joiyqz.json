@@ -1,0 +1,26 @@
+{
+  "planId": "plan-1773409290465-0joiyqz",
+  "sessionId": "session-1773213495730-q26rsj0",
+  "missionId": "turn:1773409290459-k5irass",
+  "turnId": "turn:1773409290459-k5irass",
+  "version": 1,
+  "mode": "standard",
+  "status": "completed",
+  "source": "orchestrator",
+  "promptDigest": "wsl 安装的claude code卸载教程",
+  "summary": "wsl 安装的claude code卸载教程",
+  "acceptanceCriteria": [],
+  "constraints": [],
+  "items": [],
+  "links": {
+    "assignmentIds": [],
+    "todoIds": []
+  },
+  "createdAt": 1773409290465,
+  "updatedAt": 1773409306955,
+  "review": {
+    "status": "approved",
+    "reviewer": "system:auto",
+    "reviewedAt": 1773409290468
+  }
+}

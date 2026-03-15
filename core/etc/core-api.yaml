@@ -1,0 +1,13 @@
+Name: core-api
+Host: 0.0.0.0
+Port: 8888
+Mysql:
+  DataSource: root:123456@(127.0.0.1:3306)/cloud_disk?charset=utf8mb4&parseTime=True&loc=Local
+Redis:
+  Addr: 127.0.0.1:6379
+  Password: ""
+  DB: 0  
+Casbin:
+  ModelPath: internal/authorization/model.conf
+  PolicyPath: internal/authorization/policy.csv
+  

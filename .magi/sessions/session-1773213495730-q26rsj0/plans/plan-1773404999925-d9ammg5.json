@@ -1,0 +1,26 @@
+{
+  "planId": "plan-1773404999925-d9ammg5",
+  "sessionId": "session-1773213495730-q26rsj0",
+  "missionId": "turn:1773404999922-mh5uez7",
+  "turnId": "turn:1773404999922-mh5uez7",
+  "version": 1,
+  "mode": "standard",
+  "status": "completed",
+  "source": "orchestrator",
+  "promptDigest": "[error] Error fetching errorMessage=\"local-environments is not supported in the extension\" errorName=Error errorStack=\"Error: local-environments is not supported in the extension\\n at Object.local-environments (c:\\\\Users\\\\38624\\\\.vscode\\\\ex...",
+  "summary": "[error] Error fetching errorMessage=\"local-environments is not supported in the extension\" errorName=Error errorStack=\"Error: local-environments is not supported in the extension\\n    at Object.local-environments (c:\\\\Users\\\\38624\\\\.vscode\\\\extensions\\\\openai.chatgpt-26.311.21342-win32-x64\\\\out\\\\extension.js:254:19991)\\n    at Ow.handleVSCodeRequest (c:\\\\Users\\\\38624\\\\.vscode\\\\extensions\\\\openai.chatgpt-26.311.21342-win32-x64\\\\out\\\\extension.js:254:25409)\\n    at q_.fetch (c:\\\\Users\\\\38624\\\\.vscode\\\\extensions\\\\openai.chatgpt-26.311.21342-win32-x64\\\\out\\\\extension.js:213:1973)\\n    at t.handleMessage (c:\\\\Users\\\\38624\\\\.vscode\\\\extensions\\\\openai.chatgpt-26.311.21342-win32-x64\\\\out\\\\extension.js:229:60461)\\n    at Bu.value (c:\\\\Users\\\\38624\\\\.vscode\\\\extensions\\\\openai.chatgpt-26.311.21342-win32-x64\\\\out\\\\extension.js:229:51259)\\n    at E._deliver (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:403:2869)\\n    at E.fire (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:403:3187)\\n    at bE.$onMessage (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:521:112693)\\n    at r._doInvokeHandler (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:407:153944)\\n    at r._invokeHandler (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:407:153692)\\n    at r._receiveRequest (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:407:152474)\\n    at r._receiveOneMessage (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:407:151487)\\n    at Bu.value (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:407:149387)\\n    at E._deliver (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:403:2869)\\n    at E.fire (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:403:3187)\\n    at Ji.fire (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:405:8437)\\n    at Bu.value (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:800:9911)\\n    at E._deliver (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:403:2869)\\n    at E.fire (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:403:3187)\\n    at Ji.fire (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:405:8437)\\n    at MessagePortMain.<anonymous> (file:///d:/Program%20Files%20(x86)/Microsoft%20VS%20Code/ce099c1ed2/resources/app/out/vs/workbench/api/node/extensionHostProcess.js:800:8082)\\n    at MessagePortMain.emit (node:events:519:28)\\n    at Object.MessagePortMain._internalPort.emit (node:electron/js2c/utility_init:2:2959)\\n    at Object.callbackTrampoline (node:internal/async_hooks:130:17)\" url=vscode://codex/local-environments",
+  "acceptanceCriteria": [],
+  "constraints": [],
+  "items": [],
+  "links": {
+    "assignmentIds": [],
+    "todoIds": []
+  },
+  "createdAt": 1773404999925,
+  "updatedAt": 1773405035686,
+  "review": {
+    "status": "approved",
+    "reviewer": "system:auto",
+    "reviewedAt": 1773404999927
+  }
+}

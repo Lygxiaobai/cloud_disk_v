@@ -1,0 +1,26 @@
+{
+  "planId": "plan-1773409503604-zrgei1v",
+  "sessionId": "session-1773213495730-q26rsj0",
+  "missionId": "turn:1773409503600-ovo967j",
+  "turnId": "turn:1773409503600-ovo967j",
+  "version": 1,
+  "mode": "standard",
+  "status": "completed",
+  "source": "orchestrator",
+  "promptDigest": "这样",
+  "summary": "这样",
+  "acceptanceCriteria": [],
+  "constraints": [],
+  "items": [],
+  "links": {
+    "assignmentIds": [],
+    "todoIds": []
+  },
+  "createdAt": 1773409503604,
+  "updatedAt": 1773409517043,
+  "review": {
+    "status": "approved",
+    "reviewer": "system:auto",
+    "reviewedAt": 1773409503616
+  }
+}

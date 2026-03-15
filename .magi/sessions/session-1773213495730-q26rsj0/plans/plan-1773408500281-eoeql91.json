@@ -1,0 +1,26 @@
+{
+  "planId": "plan-1773408500281-eoeql91",
+  "sessionId": "session-1773213495730-q26rsj0",
+  "missionId": "turn:1773408500248-5p44uwz",
+  "turnId": "turn:1773408500248-5p44uwz",
+  "version": 1,
+  "mode": "standard",
+  "status": "failed",
+  "source": "orchestrator",
+  "promptDigest": "找到我的claude cli安装的位置 告诉我怎么卸载 再找到.claude文件位置",
+  "summary": "找到我的claude cli安装的位置 告诉我怎么卸载  再找到.claude文件位置",
+  "acceptanceCriteria": [],
+  "constraints": [],
+  "items": [],
+  "links": {
+    "assignmentIds": [],
+    "todoIds": []
+  },
+  "createdAt": 1773408500281,
+  "updatedAt": 1773408628859,
+  "review": {
+    "status": "approved",
+    "reviewer": "system:auto",
+    "reviewedAt": 1773408500287
+  }
+}

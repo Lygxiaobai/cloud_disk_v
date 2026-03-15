@@ -1,0 +1,26 @@
+{
+  "planId": "plan-1773389008075-7tueedy",
+  "sessionId": "session-1773213495730-q26rsj0",
+  "missionId": "turn:1773389008069-rcv1k0w",
+  "turnId": "turn:1773389008069-rcv1k0w",
+  "version": 1,
+  "mode": "standard",
+  "status": "failed",
+  "source": "orchestrator",
+  "promptDigest": "go-zero写业务 时 new一个对象 传给xorm &这个对象 报一个指针到另一个指针不被允许是啥意思",
+  "summary": "go-zero写业务 时  new一个对象  传给xorm &这个对象 报一个指针到另一个指针不被允许是啥意思",
+  "acceptanceCriteria": [],
+  "constraints": [],
+  "items": [],
+  "links": {
+    "assignmentIds": [],
+    "todoIds": []
+  },
+  "createdAt": 1773389008075,
+  "updatedAt": 1773389055221,
+  "review": {
+    "status": "approved",
+    "reviewer": "system:auto",
+    "reviewedAt": 1773389008077
+  }
+}

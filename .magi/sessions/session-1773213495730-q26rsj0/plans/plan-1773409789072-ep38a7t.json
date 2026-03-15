@@ -1,0 +1,26 @@
+{
+  "planId": "plan-1773409789072-ep38a7t",
+  "sessionId": "session-1773213495730-q26rsj0",
+  "missionId": "turn:1773409789066-t271pog",
+  "turnId": "turn:1773409789066-t271pog",
+  "version": 1,
+  "mode": "standard",
+  "status": "completed",
+  "source": "orchestrator",
+  "promptDigest": "就是这样一直不动了 上图",
+  "summary": "就是这样一直不动了 上图",
+  "acceptanceCriteria": [],
+  "constraints": [],
+  "items": [],
+  "links": {
+    "assignmentIds": [],
+    "todoIds": []
+  },
+  "createdAt": 1773409789072,
+  "updatedAt": 1773409802700,
+  "review": {
+    "status": "approved",
+    "reviewer": "system:auto",
+    "reviewedAt": 1773409789123
+  }
+}

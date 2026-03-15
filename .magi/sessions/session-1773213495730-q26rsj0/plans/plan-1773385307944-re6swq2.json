@@ -1,0 +1,26 @@
+{
+  "planId": "plan-1773385307944-re6swq2",
+  "sessionId": "session-1773213495730-q26rsj0",
+  "missionId": "turn:1773385307939-8sikahb",
+  "turnId": "turn:1773385307939-8sikahb",
+  "version": 1,
+  "mode": "standard",
+  "status": "completed",
+  "source": "orchestrator",
+  "promptDigest": "A",
+  "summary": "A",
+  "acceptanceCriteria": [],
+  "constraints": [],
+  "items": [],
+  "links": {
+    "assignmentIds": [],
+    "todoIds": []
+  },
+  "createdAt": 1773385307944,
+  "updatedAt": 1773385360335,
+  "review": {
+    "status": "approved",
+    "reviewer": "system:auto",
+    "reviewedAt": 1773385307947
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "planId": "plan-1773373193513-8m91z5a",
+  "sessionId": "session-1773213495730-q26rsj0",
+  "missionId": "turn:1773373193491-zwgg5d0",
+  "turnId": "turn:1773373193491-zwgg5d0",
+  "version": 1,
+  "mode": "standard",
+  "status": "completed",
+  "source": "orchestrator",
+  "promptDigest": "你是什么模型",
+  "summary": "你是什么模型",
+  "acceptanceCriteria": [],
+  "constraints": [],
+  "items": [],
+  "links": {
+    "assignmentIds": [],
+    "todoIds": []
+  },
+  "createdAt": 1773373193513,
+  "updatedAt": 1773373210235,
+  "review": {
+    "status": "approved",
+    "reviewer": "system:auto",
+    "reviewedAt": 1773373193517
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "planId": "plan-1773409886999-1p03hlm",
+  "sessionId": "session-1773213495730-q26rsj0",
+  "missionId": "turn:1773409886992-djtad7n",
+  "turnId": "turn:1773409886992-djtad7n",
+  "version": 1,
+  "mode": "standard",
+  "status": "completed",
+  "source": "orchestrator",
+  "promptDigest": "你先帮我解决codex401问题 你和codex使用的都是第三方的api和key 你这边能用 但codex插件报401是为啥",
+  "summary": "你先帮我解决codex401问题 你和codex使用的都是第三方的api和key 你这边能用 但codex插件报401是为啥",
+  "acceptanceCriteria": [],
+  "constraints": [],
+  "items": [],
+  "links": {
+    "assignmentIds": [],
+    "todoIds": []
+  },
+  "createdAt": 1773409886999,
+  "updatedAt": 1773409903029,
+  "review": {
+    "status": "approved",
+    "reviewer": "system:auto",
+    "reviewedAt": 1773409887001
+  }
+}

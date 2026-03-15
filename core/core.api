@@ -1,0 +1,281 @@
+syntax = "v1"
+
+service core-api {
+	@handler UserLogin
+	post /user/login (LoginRequest) returns (LoginResponse)
+
+	@handler UserDetail
+	get /user/detail (UserDetailRequest) returns (UserDetailResponse)
+
+	@handler MailCodeSendRegister
+	post /mail/code/send/register (MailCodeRequest) returns (MailCodeResponse)
+
+	@handler UserRegister
+	post /user/register (UserRegisterRequest) returns (UserRegisterResponse)
+
+	@handler RefreshToken
+	put /refresh/token (RefreshTokenRequest) returns (RefreshTokenResponse)
+}
+
+type RefreshTokenRequest {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type RefreshTokenResponse {
+	Token        string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+@server (
+	middleware: Auth
+)
+service core-api {
+	@handler FileUpload
+	post /file/upload (FileUploadRequest) returns (FileUploadResponse)
+
+	//用户关联存储
+	@handler UserRepositorySave
+	post /user/repository/save (UserRepositySaveRequest) returns (UserRepositySaveResponse)
+
+	//用户文件列表
+	@handler UserFileList
+	get /user/file/list (UserFileListRequest) returns (UserFileListResponse)
+
+	//用户文件名修改
+	@handler UserFileNameUpdate
+	put /user/file/name/update (UserFileNameUpdateRequest) returns (UserFileNameUpdateResponse)
+
+	//用户文件夹创建
+	@handler UserFolderCreate
+	put /user/folder/create (UserFolderCreateRequest) returns (UserFolderCreateResponse)
+
+	//用户文件删除
+	@handler UserFileDelete
+	delete /user/file/delete (UserFileDeleteRequest) returns (UserFileDeleteResponse)
+
+	//用户文件移动
+	@handler UserFileMove
+	put /user/file/move (UserFileMoveRequest) returns (UserFileMoveResponse)
+
+	//创建分享记录
+	@handler ShareBasicCreate
+	post /share/basic/create (ShareBasicCreateRequest) returns (ShareBasicCreateResponse)
+
+	//用户保存分享资源
+	@handler ShareFileSave
+	post /share/file/save (ShareFileSaveRequest) returns (ShareFileSaveResponse)
+
+	//文件分片上传
+	@handler FileUploadMultipart
+	post /file/upload/multipart (FileUploadMultipartRequest) returns (FileUploadMultipartResponse)
+
+	//左侧显示文件夹目录
+	@handler UserFolderChildren
+	get /user/folder/children/:id (UserFolderChildrenRequest) returns (UserFolderChildrenResponse)
+
+	//用户文件夹路径   用于快速定位 修复
+	@handler UserFolderPath
+	get /user/folder/path/:identity (UserFolderPathRequest) returns (UserFolderPathResponse)
+}
+
+type UserFolderPathRequest {
+	Identity string `path:"identity"` //用户文件唯一凭证
+}
+
+type UserFolderPathResponse {
+	List []*FolderPathItem `json:"list"`
+}
+
+type FolderPathItem {
+	Id       int64  `json:"id"`
+	Identity string `json:"identity"`
+	Name     string `json:"name"`
+}
+
+type UserFolderChildrenRequest {
+	Id int64 `path:"id"`
+}
+
+type UserFolderChildrenResponse {
+	List []*UserFolderNode `json:"list"`
+}
+
+type UserFolderNode {
+	Id          int64  `json:"id"`
+	Identity    string `json:"identity"`
+	ParentId    int64  `json:"parent_id"`
+	Name        string `json:"name"`
+	HasChildren int    `json:"has_children"`
+}
+
+type FileUploadMultipartRequest {
+	Hash string `json:"hash,optional"`
+	Name string `json:"name,optional"`
+	Ext  string `json:"ext,optional"`
+	Size int64  `json:"size,optional"`
+	Path string `json:"path,optional"`
+}
+
+type FileUploadMultipartResponse {
+	Identity string `json:"identity"`
+}
+
+type ShareFileSaveRequest {
+	RepositoryIdentity string `json:"repository_identity"`
+	ParentId           int64  `json:"parent_id"`
+}
+
+type ShareFileSaveResponse {
+	Identity string `json:"identity"`
+}
+
+//获取分享资源详细
+service core-api {
+	@handler ShareFileDetail
+	get /share/file/detail/:identity (ShareFileDetailRequest) returns (ShareFileDetailResponse)
+}
+
+type ShareFileDetailRequest {
+	Identity string `path:"identity"`
+}
+
+type ShareFileDetailResponse {
+	RepositoryIdentity string `json:"repository_identity"`
+	Name               string `json:"name"`
+	Ext                string `json:"ext"`
+	Size               int64  `json:"size"`
+	Path               string `json:"path"`
+}
+
+type LoginRequest {
+	Name     string `json:"name"`
+	Password string `json:"password"`
+}
+
+type LoginResponse {
+	Token        string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+type UserDetailRequest {
+	Identity string `json:"identity, optional"`
+}
+
+type UserDetailResponse {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+type MailCodeRequest {
+	Email string `json:"email"`
+}
+
+type MailCodeResponse {
+	Code string `json:"code"`
+}
+
+type UserRegisterRequest {
+	//       Identity string `json:"identity"`
+	Name     string `json:"name"`
+	Password string `json:"password"`
+	Email    string `json:"email"`
+	Code     string `json:"code"`
+}
+
+type UserRegisterResponse {}
+
+type FileUploadRequest {
+	Hash string `json:"hash,optional"`
+	Name string `json:"name,optional"`
+	Ext  string `json:"ext,optional"`
+	Size int64  `json:"size,optional"`
+	Path string `json:"path,optional"`
+}
+
+type FileUploadResponse {
+	Identity string `json:"identity"`
+	Ext      string `json:"ext"`
+	Name     string `json:"name"`
+}
+
+type UserRepositySaveRequest {
+	ParentId         int64  `json:"parentId"`
+	ReposityIdentity string `json:"repositoryIdentity"`
+	Ext              string `json:"ext"`
+	Name             string `json:"name"`
+}
+
+type UserRepositySaveResponse {}
+
+type UserFileListRequest {
+	Id       int64  `json:"id,optional"` // 兼容旧逻辑，按父级 id 查询
+	Identity string `form:"identity,optional"` // 目录唯一凭证，优先使用这个查询目录内容
+	Page     int    `json:"page,optional"` // 第几页
+	Size     int    `json:"size,optional"` // 每页文件数量
+}
+
+type UserFileListResponse {
+	List  []*UserFile `json:"list"`
+	Count int64       `json:"count"` //list总数量
+}
+
+type UserFile {
+	Id                 int64  `json:"id"`
+	Identity           string `json:"identity"`
+	RepositoryIdentity string `json:"repository_identity"`
+	Name               string `json:"name"`
+	Ext                string `json:"ext"`
+	Path               string `json:"path"`
+	Size               int64  `json:"size"`
+	IsDir              int    `json:"is_dir"` //是否是文件夹 1 是 0 不是
+}
+
+type UserFileNameUpdateRequest {
+	Name     string `json:"name"`
+	Identity string `json:"identity"` //用户文件存储的唯一凭证
+}
+
+type UserFileNameUpdateResponse {}
+
+type UserFolderCreateRequest {
+	Name     string `json:"name"`
+	ParentId int64  `json:"parentId"`
+}
+
+type UserFolderCreateResponse {
+	Identity string `json:"identity"`
+}
+
+type UserFileDeleteRequest {
+	Identity string `json:"identity"`
+}
+
+type UserFileDeleteResponse {}
+
+type ShareBasicCreateRequest {
+	UserRepositoryIdentity string `json:"user_repository_identity"`
+	ExpiredTime            int    `json:"expired_time"`
+}
+
+type ShareBasicCreateResponse {
+	Identity string `json:"identity"`
+}
+
+type ShareBasicDetailRequest {
+	Identity string `json:"identity"`
+}
+
+type ShareBasicDetailResponse {
+	RepositoryIdentity string `json:"repository_identity"`
+	Name               string `json:"name"`
+	Ext                string `json:"ext"`
+	Size               int64  `json:"size"`
+	Path               string `json:"path"`
+}
+
+type UserFileMoveRequest {
+	ParentIdentity string `json:"parent_identity"`
+	Identity       string `json:"identity"`
+}
+
+type UserFileMoveResponse {}
