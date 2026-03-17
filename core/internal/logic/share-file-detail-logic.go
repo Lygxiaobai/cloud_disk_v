@@ -34,7 +34,28 @@ func (l *ShareFileDetailLogic) ShareFileDetail(req *types.ShareFileDetailRequest
 	ctx = context.WithValue(ctx, "path", "/share/file/detail")
 	ctx = context.WithValue(ctx, "trace_id", traceID)
 
-	//每次点击分享链接时，次数加一
+	// 1. 判断是否是热门分享
+	isHot := l.svcCtx.ShareCache.IsHotShare(ctx, req.Identity)
+
+	// 2. 如果是热门分享，优先从 Redis 读取
+	if isHot {
+		resp, err = l.svcCtx.ShareCache.GetShareDetail(ctx, req.Identity)
+		if err != nil {
+			logger.LogError(ctx, "从Redis读取分享详情失败", err, map[string]interface{}{
+				"share_identity": req.Identity,
+			})
+			// Redis 读取失败，继续查数据库
+		} else if resp != nil {
+			// 缓存命中，更新点击次数（异步，不影响响应速度）
+			go func() {
+				l.svcCtx.ShareCache.IncrClickNum(context.Background(), req.Identity)
+			}()
+			return resp, nil
+		}
+	}
+
+	// 3. 缓存未命中或不是热门分享，查询数据库
+	// 更新点击次数
 	_, err = l.svcCtx.Engine.Exec("update share_basic set click_num = click_num + 1 where identity = ?", req.Identity)
 	if err != nil {
 		logger.LogError(ctx, "更新分享点击次数失败", err, map[string]interface{}{
@@ -42,7 +63,8 @@ func (l *ShareFileDetailLogic) ShareFileDetail(req *types.ShareFileDetailRequest
 		})
 		return nil, err
 	}
-	//1.从shareIdentity中获取导Repository信息
+
+	// 查询分享详情
 	resp = &types.ShareFileDetailResponse{}
 	_, err = l.svcCtx.Engine.Table("share_basic").
 		Select("share_basic.repository_identity, user_repository.name, user_repository.ext,repository_pool.size,repository_pool.path").
@@ -54,6 +76,17 @@ func (l *ShareFileDetailLogic) ShareFileDetail(req *types.ShareFileDetailRequest
 			"share_identity": req.Identity,
 		})
 		return nil, err
+	}
+
+	// 4. 如果是热门分享，写入缓存
+	if isHot {
+		err = l.svcCtx.ShareCache.SetShareDetail(ctx, req.Identity, resp)
+		if err != nil {
+			logger.LogError(ctx, "写入分享详情到Redis失败", err, map[string]interface{}{
+				"share_identity": req.Identity,
+			})
+			// 写入缓存失败不影响业务，继续返回
+		}
 	}
 
 	return

@@ -17,7 +17,13 @@
       "Bash(rm -rf internal/mq)",
       "Bash(rm -f test_error_log.go test_error_log_complete.go)",
       "Bash(/tmp/explain_part1.txt:*)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker run:*)",
+      "Bash(pkill -f \"go run core.go\")",
+      "Bash(taskkill //F //IM core.exe)",
+      "Bash(netstat -ano)"
     ]
   }
 }
