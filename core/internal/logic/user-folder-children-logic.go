@@ -4,6 +4,7 @@
 package logic
 
 import (
+	"cloud_disk/core/internal/logger"
 	"context"
 
 	"cloud_disk/core/internal/svc"
@@ -27,6 +28,12 @@ func NewUserFolderChildrenLogic(ctx context.Context, svcCtx *svc.ServiceContext)
 }
 
 func (l *UserFolderChildrenLogic) UserFolderChildren(req *types.UserFolderChildrenRequest, userIdentity string) (resp *types.UserFolderChildrenResponse, err error) {
+	// 从 context 中获取 TraceID
+	traceID, _ := l.ctx.Value("trace_id").(string)
+	ctx := context.WithValue(l.ctx, "method", "GET")
+	ctx = context.WithValue(ctx, "path", "/user/folder/children")
+	ctx = context.WithValue(ctx, "user_identity", userIdentity)
+	ctx = context.WithValue(ctx, "trace_id", traceID)
 
 	// 能进来当前这个处理函数的都是文件夹
 	//本函数 就是1.找当前文件夹的同级文件夹 2.判断当前文件夹是否有子文件夹 然后保存信息到UserFolderNode中
@@ -47,7 +54,7 @@ func (l *UserFolderChildrenLogic) UserFolderChildren(req *types.UserFolderChildr
 				) THEN 1 ELSE 0 END AS has_children
 			FROM user_repository ur
 			WHERE ur.user_identity = ?
-			  AND ur.parent_id = ?  
+			  AND ur.parent_id = ?
 			  AND ur.is_dir = 1
 			  AND ur.deleted_at IS NULL
 			ORDER BY ur.id ASC
@@ -56,6 +63,9 @@ func (l *UserFolderChildrenLogic) UserFolderChildren(req *types.UserFolderChildr
 
 	err = l.svcCtx.Engine.SQL(sql, userIdentity, req.Id).Find(&list)
 	if err != nil {
+		logger.LogError(ctx, "查询文件夹子项失败", err, map[string]interface{}{
+			"parent_id": req.Id,
+		})
 		return nil, err
 	}
 	resp = &types.UserFolderChildrenResponse{}

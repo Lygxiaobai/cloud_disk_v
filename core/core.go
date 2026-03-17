@@ -6,9 +6,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 
 	"cloud_disk/core/internal/config"
 	"cloud_disk/core/internal/handler"
+	"cloud_disk/core/internal/logger"
 	"cloud_disk/core/internal/svc"
 
 	"github.com/zeromicro/go-zero/core/conf"
@@ -19,6 +21,13 @@ var configFile = flag.String("f", "etc/core-api.yaml", "the config file")
 
 func main() {
 	flag.Parse()
+
+	// 初始化简化版日志系统
+	if err := logger.InitSimpleLogger("./logs/error.log"); err != nil {
+		log.Fatalf("初始化日志系统失败: %v", err)
+	}
+	defer logger.Close()
+	log.Println("✅ 日志系统初始化成功")
 
 	var c config.Config
 	conf.MustLoad(*configFile, &c)

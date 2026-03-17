@@ -13,38 +13,41 @@ import (
 
 func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 	server.AddRoutes(
-		[]rest.Route{
-			{
-				Method:  http.MethodPost,
-				Path:    "/mail/code/send/register",
-				Handler: MailCodeSendRegisterHandler(serverCtx),
-			},
-			{
-				Method:  http.MethodPut,
-				Path:    "/refresh/token",
-				Handler: RefreshTokenHandler(serverCtx),
-			},
-			{
-				Method:  http.MethodGet,
-				Path:    "/user/detail",
-				Handler: UserDetailHandler(serverCtx),
-			},
-			{
-				Method:  http.MethodPost,
-				Path:    "/user/login",
-				Handler: UserLoginHandler(serverCtx),
-			},
-			{
-				Method:  http.MethodPost,
-				Path:    "/user/register",
-				Handler: UserRegisterHandler(serverCtx),
-			},
-		},
+		rest.WithMiddlewares(
+			[]rest.Middleware{serverCtx.ErrorRecovery},
+			[]rest.Route{
+				{
+					Method:  http.MethodPost,
+					Path:    "/mail/code/send/register",
+					Handler: MailCodeSendRegisterHandler(serverCtx),
+				},
+				{
+					Method:  http.MethodPut,
+					Path:    "/refresh/token",
+					Handler: RefreshTokenHandler(serverCtx),
+				},
+				{
+					Method:  http.MethodGet,
+					Path:    "/user/detail",
+					Handler: UserDetailHandler(serverCtx),
+				},
+				{
+					Method:  http.MethodPost,
+					Path:    "/user/login",
+					Handler: UserLoginHandler(serverCtx),
+				},
+				{
+					Method:  http.MethodPost,
+					Path:    "/user/register",
+					Handler: UserRegisterHandler(serverCtx),
+				},
+			}...,
+		),
 	)
 
 	server.AddRoutes(
 		rest.WithMiddlewares(
-			[]rest.Middleware{serverCtx.Auth, serverCtx.Casbin},
+			[]rest.Middleware{serverCtx.ErrorRecovery, serverCtx.Auth, serverCtx.Casbin},
 			[]rest.Route{
 				{
 					Method:  http.MethodPost,
@@ -111,12 +114,15 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 	)
 
 	server.AddRoutes(
-		[]rest.Route{
-			{
-				Method:  http.MethodGet,
-				Path:    "/share/file/detail/:identity",
-				Handler: ShareFileDetailHandler(serverCtx),
-			},
-		},
+		rest.WithMiddlewares(
+			[]rest.Middleware{serverCtx.ErrorRecovery},
+			[]rest.Route{
+				{
+					Method:  http.MethodGet,
+					Path:    "/share/file/detail/:identity",
+					Handler: ShareFileDetailHandler(serverCtx),
+				},
+			}...,
+		),
 	)
 }

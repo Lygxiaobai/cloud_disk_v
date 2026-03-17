@@ -4,6 +4,7 @@
 package logic
 
 import (
+	"cloud_disk/core/internal/logger"
 	"cloud_disk/core/internal/models"
 	"context"
 	"errors"
@@ -30,6 +31,13 @@ func NewUserFolderPathLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Us
 
 // 从当前目录到根目录的路径 然后进行反转
 func (l *UserFolderPathLogic) UserFolderPath(req *types.UserFolderPathRequest, userIdentity string) (resp *types.UserFolderPathResponse, err error) {
+	// 从 context 中获取 TraceID
+	traceID, _ := l.ctx.Value("trace_id").(string)
+	ctx := context.WithValue(l.ctx, "method", "GET")
+	ctx = context.WithValue(ctx, "path", "/user/folder/path")
+	ctx = context.WithValue(ctx, "user_identity", userIdentity)
+	ctx = context.WithValue(ctx, "trace_id", traceID)
+
 	list := []*types.FolderPathItem{}
 	//identity = ""
 	if req.Identity == "" {
@@ -46,10 +54,18 @@ func (l *UserFolderPathLogic) UserFolderPath(req *types.UserFolderPathRequest, u
 	curr := models.UserRepository{}
 	has, err := l.svcCtx.Engine.Where("identity=? and is_dir = 1 and user_identity = ?", req.Identity, userIdentity).Get(&curr)
 	if err != nil {
+		logger.LogError(ctx, "查询文件夹失败", err, map[string]interface{}{
+			"folder_identity": req.Identity,
+		})
 		return nil, err
 	}
 	if !has {
-		return nil, errors.New("该文件非文件夹！")
+		err = errors.New("该文件非文件夹！")
+		logger.LogError(ctx, "查询文件夹路径失败", err, map[string]interface{}{
+			"folder_identity": req.Identity,
+			"reason":          "不是文件夹",
+		})
+		return nil, err
 	}
 	for {
 		list = append(list, &types.FolderPathItem{
@@ -63,10 +79,18 @@ func (l *UserFolderPathLogic) UserFolderPath(req *types.UserFolderPathRequest, u
 		parent := models.UserRepository{}
 		has, err = l.svcCtx.Engine.Where("id=? AND user_identity = ? AND is_dir = 1", curr.ParentId, userIdentity).Get(&parent)
 		if err != nil {
+			logger.LogError(ctx, "查询父级文件夹失败", err, map[string]interface{}{
+				"parent_id": curr.ParentId,
+			})
 			return nil, err
 		}
 		if !has {
-			return nil, errors.New("未找到父级文件夹！")
+			err = errors.New("未找到父级文件夹！")
+			logger.LogError(ctx, "查询文件夹路径失败", err, map[string]interface{}{
+				"parent_id": curr.ParentId,
+				"reason":    "父级文件夹不存在",
+			})
+			return nil, err
 		}
 		curr = parent
 

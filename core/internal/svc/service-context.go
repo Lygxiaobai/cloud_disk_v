@@ -15,11 +15,12 @@ import (
 )
 
 type ServiceContext struct {
-	Config config.Config
-	Engine *xorm.Engine
-	RDB    *redis.Client
-	Auth   rest.Middleware
-	Casbin rest.Middleware
+	Config        config.Config
+	Engine        *xorm.Engine
+	RDB           *redis.Client
+	Auth          rest.Middleware
+	Casbin        rest.Middleware
+	ErrorRecovery rest.Middleware
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
@@ -30,10 +31,11 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 
 	return &ServiceContext{
-		Config: c,
-		Engine: models.Init(c.Mysql.DataSource),
-		RDB:    models.InitRedis(c.Redis.Addr),
-		Auth:   middleware.NewAuthMiddleware().Handle,
-		Casbin: middleware.NewCasbinMiddleware(enforcer).Handle,
+		Config:        c,
+		Engine:        models.Init(c.Mysql.DataSource),
+		RDB:           models.InitRedis(c.Redis.Addr),
+		Auth:          middleware.NewAuthMiddleware().Handle,
+		Casbin:        middleware.NewCasbinMiddleware(enforcer).Handle,
+		ErrorRecovery: middleware.NewErrorRecoveryMiddleware().Handle,
 	}
 }

@@ -6,6 +6,7 @@ package logic
 import (
 	"cloud_disk/core/internal/define"
 	"cloud_disk/core/internal/helper"
+	"cloud_disk/core/internal/logger"
 	"cloud_disk/core/internal/models"
 	"context"
 	"errors"
@@ -32,13 +33,30 @@ func NewMailCodeSendRegisterLogic(ctx context.Context, svcCtx *svc.ServiceContex
 }
 
 func (l *MailCodeSendRegisterLogic) MailCodeSendRegister(req *types.MailCodeRequest) (resp *types.MailCodeResponse, err error) {
+	//设置traceId
+	traceId := l.ctx.Value("trace_id").(string)
+	//构建上下文信息
+	ctx := context.WithValue(l.ctx, "method", "POST")
+	ctx = context.WithValue(ctx, "trace_id", traceId)
+	ctx = context.WithValue(ctx, "path", "/mail/code/send/register")
+
 	//1.检验邮箱是否注册
 	count, err := l.svcCtx.Engine.Where("email=?", req.Email).Count(&models.UserBasic{})
 	if err != nil {
+		//写入文件系统
+		err := errors.New("邮箱有误")
+		logger.LogError(ctx, "邮箱验证失败", err, map[string]interface{}{
+			"email": req.Email,
+		})
 		return nil, err
 	}
 	if count > 0 {
-		return nil, errors.New("该邮箱已被注册")
+		//写入文件系统
+		err := errors.New("该邮箱已被注册")
+		logger.LogError(ctx, "该邮箱已被注册", err, map[string]interface{}{
+			"email": req.Email,
+		})
+		return nil, err
 	}
 	//2.未注册 发送验证码
 	//2.1生成随机验证码
@@ -46,6 +64,11 @@ func (l *MailCodeSendRegisterLogic) MailCodeSendRegister(req *types.MailCodeRequ
 	//3.存储到redis
 	err = l.svcCtx.RDB.Set(l.ctx, "code", code, time.Second*time.Duration(define.CodeExpireTime)).Err()
 	if err != nil {
+		//写入文件系统
+		err := errors.New("验证码写入redis出现错误")
+		logger.LogError(ctx, "验证码写入redis出现错误", err, map[string]interface{}{
+			"code": code,
+		})
 		return nil, err
 	}
 	err = helper.MailCodeSend(req.Email, code)
