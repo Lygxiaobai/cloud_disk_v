@@ -4,11 +4,10 @@
 package logic
 
 import (
+	"cloud_disk/core/internal/errors"
 	"cloud_disk/core/internal/helper"
-	"cloud_disk/core/internal/logger"
 	"cloud_disk/core/internal/models"
 	"context"
-	"errors"
 	"fmt"
 
 	"cloud_disk/core/internal/svc"
@@ -32,31 +31,21 @@ func NewUserFolderCreateLogic(ctx context.Context, svcCtx *svc.ServiceContext) *
 }
 
 func (l *UserFolderCreateLogic) UserFolderCreate(req *types.UserFolderCreateRequest, userIdentity string) (resp *types.UserFolderCreateResponse, err error) {
-	// 从 context 中获取 TraceID
-	traceID, _ := l.ctx.Value("trace_id").(string)
-	ctx := context.WithValue(l.ctx, "method", "PUT")
-	ctx = context.WithValue(ctx, "path", "/user/folder/create")
-	ctx = context.WithValue(ctx, "user_identity", userIdentity)
-	ctx = context.WithValue(ctx, "trace_id", traceID)
-
 	//1.先查看当前层级有无这个同名的文件
 	count, err := l.svcCtx.Engine.Where("name = ? AND parent_id = ?", req.Name, req.ParentId).Count(&models.UserRepository{})
 	//有 返回错误信息
 	if err != nil {
-		logger.LogError(ctx, "查询文件夹失败", err, map[string]interface{}{
+		return nil, errors.New(l.ctx, "查询文件夹失败", err, map[string]interface{}{
 			"folder_name": req.Name,
 			"parent_id":   req.ParentId,
 		})
-		return nil, err
 	}
 	if count > 0 {
-		err = errors.New(fmt.Sprintf("%s already exists", req.Name))
-		logger.LogError(ctx, "创建文件夹失败", err, map[string]interface{}{
+		return nil, errors.New(l.ctx, "创建文件夹失败", fmt.Errorf("%s already exists", req.Name), map[string]interface{}{
 			"folder_name": req.Name,
 			"parent_id":   req.ParentId,
 			"reason":      "文件夹已存在",
 		})
-		return nil, err
 	}
 	up := models.UserRepository{
 		Identity:     helper.UUID(),
@@ -68,11 +57,10 @@ func (l *UserFolderCreateLogic) UserFolderCreate(req *types.UserFolderCreateRequ
 	//没有 则创建
 	_, err = l.svcCtx.Engine.Insert(&up)
 	if err != nil {
-		logger.LogError(ctx, "插入文件夹失败", err, map[string]interface{}{
+		return nil, errors.New(l.ctx, "插入文件夹失败", err, map[string]interface{}{
 			"folder_name": req.Name,
 			"parent_id":   req.ParentId,
 		})
-		return nil, err
 	}
 	resp = &types.UserFolderCreateResponse{
 		Identity: up.Identity,

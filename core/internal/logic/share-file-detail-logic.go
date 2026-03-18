@@ -4,7 +4,7 @@
 package logic
 
 import (
-	"cloud_disk/core/internal/logger"
+	"cloud_disk/core/internal/errors"
 	"context"
 
 	"cloud_disk/core/internal/svc"
@@ -28,20 +28,14 @@ func NewShareFileDetailLogic(ctx context.Context, svcCtx *svc.ServiceContext) *S
 }
 
 func (l *ShareFileDetailLogic) ShareFileDetail(req *types.ShareFileDetailRequest) (resp *types.ShareFileDetailResponse, err error) {
-	// 从 context 中获取 TraceID
-	traceID, _ := l.ctx.Value("trace_id").(string)
-	ctx := context.WithValue(l.ctx, "method", "GET")
-	ctx = context.WithValue(ctx, "path", "/share/file/detail")
-	ctx = context.WithValue(ctx, "trace_id", traceID)
-
 	// 1. 判断是否是热门分享
-	isHot := l.svcCtx.ShareCache.IsHotShare(ctx, req.Identity)
+	isHot := l.svcCtx.ShareCache.IsHotShare(l.ctx, req.Identity)
 
 	// 2. 如果是热门分享，优先从 Redis 读取
 	if isHot {
-		resp, err = l.svcCtx.ShareCache.GetShareDetail(ctx, req.Identity)
+		resp, err = l.svcCtx.ShareCache.GetShareDetail(l.ctx, req.Identity)
 		if err != nil {
-			logger.LogError(ctx, "从Redis读取分享详情失败", err, map[string]interface{}{
+			return nil, errors.New(l.ctx, "从Redis读取分享详情失败", err, map[string]interface{}{
 				"share_identity": req.Identity,
 			})
 		} else if resp != nil {
@@ -60,10 +54,9 @@ func (l *ShareFileDetailLogic) ShareFileDetail(req *types.ShareFileDetailRequest
 	// 更新点击次数和更新时间
 	_, err = l.svcCtx.Engine.Exec("update share_basic set click_num = click_num + 1, updated_at = NOW() where identity = ?", req.Identity)
 	if err != nil {
-		logger.LogError(ctx, "更新分享点击次数失败", err, map[string]interface{}{
+		return nil, errors.New(l.ctx, "更新分享点击次数失败", err, map[string]interface{}{
 			"share_identity": req.Identity,
 		})
-		return nil, err
 	}
 
 	// 更新日榜点击数（异步）
@@ -79,17 +72,16 @@ func (l *ShareFileDetailLogic) ShareFileDetail(req *types.ShareFileDetailRequest
 		Join("LEFT", "user_repository", "share_basic.user_repository_identity = user_repository.identity").
 		Where("share_basic.identity = ?", req.Identity).Get(resp)
 	if err != nil {
-		logger.LogError(ctx, "查询分享文件详情失败", err, map[string]interface{}{
+		return nil, errors.New(l.ctx, "查询分享文件详情失败", err, map[string]interface{}{
 			"share_identity": req.Identity,
 		})
-		return nil, err
 	}
 
 	// 4. 如果是热门分享，写入缓存
 	if isHot {
-		err = l.svcCtx.ShareCache.SetShareDetail(ctx, req.Identity, resp)
+		err = l.svcCtx.ShareCache.SetShareDetail(l.ctx, req.Identity, resp)
 		if err != nil {
-			logger.LogError(ctx, "写入分享详情到Redis失败", err, map[string]interface{}{
+			return nil, errors.New(l.ctx, "写入分享详情到Redis失败", err, map[string]interface{}{
 				"share_identity": req.Identity,
 			})
 			// 写入缓存失败不影响业务，继续返回

@@ -25,20 +25,17 @@ func (m *ErrorRecoveryMiddleware) Handle(next http.HandlerFunc) http.HandlerFunc
 		// 将 TraceID 设置到 Header 中
 		r.Header.Set("X-Trace-Id", traceID)
 
-		// 将 TraceID 存入 Context，供后续 Logic 使用
+		// 构建完整的 Context（包含所有日志需要的信息）
 		ctx := context.WithValue(r.Context(), "trace_id", traceID)
+		ctx = context.WithValue(ctx, "method", r.Method)
+		ctx = context.WithValue(ctx, "path", r.URL.Path)
+		ctx = context.WithValue(ctx, "user_id", r.Header.Get("UserId"))
 		r = r.WithContext(ctx)
 
 		defer func() {
 			if err := recover(); err != nil {
-				// 构建上下文信息
-				panicCtx := context.WithValue(r.Context(), "method", r.Method)
-				panicCtx = context.WithValue(panicCtx, "path", r.URL.Path)
-				panicCtx = context.WithValue(panicCtx, "user_id", r.Header.Get("UserId"))
-				panicCtx = context.WithValue(panicCtx, "trace_id", traceID)
-
-				// 记录 panic 日志
-				logger.LogPanic(panicCtx, err, map[string]interface{}{
+				// 直接使用 r.Context()，不需要重新构建
+				logger.LogPanic(r.Context(), err, map[string]interface{}{
 					"remote_addr": r.RemoteAddr,
 					"user_agent":  r.UserAgent(),
 				})

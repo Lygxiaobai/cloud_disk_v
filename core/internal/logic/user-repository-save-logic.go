@@ -4,8 +4,8 @@
 package logic
 
 import (
+	"cloud_disk/core/internal/errors"
 	"cloud_disk/core/internal/helper"
-	"cloud_disk/core/internal/logger"
 	"cloud_disk/core/internal/models"
 	"context"
 
@@ -30,13 +30,6 @@ func NewUserRepositorySaveLogic(ctx context.Context, svcCtx *svc.ServiceContext)
 }
 
 func (l *UserRepositySaveLogic) UserRepositorySave(req *types.UserRepositySaveRequest, userIdentity string) (resp *types.UserRepositySaveResponse, err error) {
-	// 从 context 中获取 TraceID
-	traceID, _ := l.ctx.Value("trace_id").(string)
-	ctx := context.WithValue(l.ctx, "method", "POST")
-	ctx = context.WithValue(ctx, "path", "/user/repository/save")
-	ctx = context.WithValue(ctx, "user_identity", userIdentity)
-	ctx = context.WithValue(ctx, "trace_id", traceID)
-
 	up := &models.UserRepository{
 		Identity:           helper.UUID(),
 		UserIdentity:       userIdentity,
@@ -48,11 +41,10 @@ func (l *UserRepositySaveLogic) UserRepositorySave(req *types.UserRepositySaveRe
 	}
 	_, err = l.svcCtx.Engine.Insert(up)
 	if err != nil {
-		logger.LogError(ctx, "保存文件到用户空间失败", err, map[string]interface{}{
+		return nil, errors.New(l.ctx, "保存文件到用户空间失败", err, map[string]interface{}{
 			"file_name":           req.Name,
 			"repository_identity": req.ReposityIdentity,
 		})
-		return nil, err
 	}
 
 	return

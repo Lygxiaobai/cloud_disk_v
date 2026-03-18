@@ -23,7 +23,11 @@
       "Bash(docker run:*)",
       "Bash(pkill -f \"go run core.go\")",
       "Bash(taskkill //F //IM core.exe)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(grep -l \"cloud_disk/core/internal/errors\" *.go)",
+      "Bash(grep -l \"cloud_disk/core/internal/logger\" *.go)",
+      "Bash(ls -1 *.go)",
+      "Bash(bash test_log_system.sh)"
     ]
   }
 }

@@ -5,10 +5,9 @@ package logic
 
 import (
 	"cloud_disk/core/internal/define"
-	"cloud_disk/core/internal/logger"
+	"cloud_disk/core/internal/errors"
 	"cloud_disk/core/internal/models"
 	"context"
-	"errors"
 
 	"cloud_disk/core/internal/svc"
 	"cloud_disk/core/internal/types"
@@ -31,13 +30,6 @@ func NewUserFileListLogic(ctx context.Context, svcCtx *svc.ServiceContext) *User
 }
 
 func (l *UserFileListLogic) UserFileList(req *types.UserFileListRequest, userIdentity string) (resp *types.UserFileListResponse, err error) {
-	// 从 context 中获取 TraceID
-	traceID, _ := l.ctx.Value("trace_id").(string)
-	ctx := context.WithValue(l.ctx, "method", "GET")
-	ctx = context.WithValue(ctx, "path", "/user/file/list")
-	ctx = context.WithValue(ctx, "user_identity", userIdentity)
-	ctx = context.WithValue(ctx, "trace_id", traceID)
-
 	list := []*types.UserFile{}
 	size := req.Size
 	if size == 0 {
@@ -57,18 +49,15 @@ func (l *UserFileListLogic) UserFileList(req *types.UserFileListRequest, userIde
 			Where("identity = ? AND user_identity = ? AND is_dir = 1", req.Identity, userIdentity).
 			Get(folder)
 		if err != nil {
-			logger.LogError(ctx, "查询文件夹失败", err, map[string]interface{}{
+			return nil, errors.New(l.ctx, "查询文件夹失败", err, map[string]interface{}{
 				"folder_identity": req.Identity,
 			})
-			return nil, err
 		}
 		if !has {
-			err = errors.New("folder not found")
-			logger.LogError(ctx, "查询文件列表失败", err, map[string]interface{}{
+			return nil, errors.New(l.ctx, "查询文件列表失败", nil, map[string]interface{}{
 				"folder_identity": req.Identity,
 				"reason":          "文件夹不存在",
 			})
-			return nil, err
 		}
 		parentID = int64(folder.Id)
 	}
@@ -82,19 +71,17 @@ func (l *UserFileListLogic) UserFileList(req *types.UserFileListRequest, userIde
 		Where("user_repository.deleted_at IS NULL").
 		Find(&list)
 	if err != nil {
-		logger.LogError(ctx, "查询文件列表失败", err, map[string]interface{}{
+		return nil, errors.New(l.ctx, "查询文件列表失败", err, map[string]interface{}{
 			"parent_id": parentID,
 			"page":      page,
 			"size":      size,
 		})
-		return nil, err
 	}
 	count, err := l.svcCtx.Engine.Where("user_identity=? AND parent_id =?", userIdentity, parentID).Count(&models.UserRepository{})
 	if err != nil {
-		logger.LogError(ctx, "统计文件数量失败", err, map[string]interface{}{
+		return nil, errors.New(l.ctx, "统计文件数量失败", err, map[string]interface{}{
 			"parent_id": parentID,
 		})
-		return nil, err
 	}
 	// 2. 返回当前目录内容列表和总数。
 	resp = &types.UserFileListResponse{
