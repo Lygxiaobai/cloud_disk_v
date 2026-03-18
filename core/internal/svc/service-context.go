@@ -7,6 +7,7 @@ import (
 	"cloud_disk/core/internal/cache"
 	"cloud_disk/core/internal/config"
 	"cloud_disk/core/internal/helper"
+	"cloud_disk/core/internal/logger"
 	"cloud_disk/core/internal/middleware"
 	"cloud_disk/core/internal/models"
 	"cloud_disk/core/internal/rabbitmq"
@@ -69,6 +70,9 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	// 启动邮件消费者（在后台 Goroutine 中运行）
 	startEmailConsumer(mq, c.RabbitMQ.EmailQueue)
 
+	// 初始化日志系统（异步模式 - RabbitMQ）
+	initAsyncLogSystem(mq, c)
+
 	return &ServiceContext{
 		Config:        c,
 		Engine:        engine,
@@ -108,4 +112,47 @@ func startEmailConsumer(mq *rabbitmq.RabbitMQ, queueName string) {
 			log.Fatalf("邮件消费者启动失败: %v", err)
 		}
 	}()
+}
+
+// initAsyncLogSystem 初始化异步日志系统（使用 RabbitMQ）
+func initAsyncLogSystem(mq *rabbitmq.RabbitMQ, c config.Config) {
+	// 1. 声明日志交换机（fanout 类型）
+	err := mq.DeclareExchange(c.RabbitMQ.LogExchange, "fanout")
+	if err != nil {
+		log.Fatalf("声明日志交换机失败: %v", err)
+	}
+
+	// 2. 声明本地日志队列
+	err = mq.DeclareQueue(c.RabbitMQ.LocalLogQueue)
+	if err != nil {
+		log.Fatalf("声明本地日志队列失败: %v", err)
+	}
+
+	// 3. 声明 ES 日志队列
+	err = mq.DeclareQueue(c.RabbitMQ.ESLogQueue)
+	if err != nil {
+		log.Fatalf("声明 ES 日志队列失败: %v", err)
+	}
+
+	// 4. 绑定队列到交换机
+	err = mq.BindQueueToExchange(c.RabbitMQ.LocalLogQueue, c.RabbitMQ.LogExchange, "")
+	if err != nil {
+		log.Fatalf("绑定本地日志队列失败: %v", err)
+	}
+
+	err = mq.BindQueueToExchange(c.RabbitMQ.ESLogQueue, c.RabbitMQ.LogExchange, "")
+	if err != nil {
+		log.Fatalf("绑定 ES 日志队列失败: %v", err)
+	}
+
+	// 5. 创建日志生产者
+	logProducer := rabbitmq.NewLogProducer(mq, c.RabbitMQ.LogExchange)
+
+	// 6. 初始化异步日志记录器
+	err = logger.InitAsyncLogger("logs/error.log", logProducer)
+	if err != nil {
+		log.Fatalf("初始化异步日志记录器失败: %v", err)
+	}
+
+	log.Println("✓ 异步日志系统初始化成功（RabbitMQ fanout 模式）")
 }

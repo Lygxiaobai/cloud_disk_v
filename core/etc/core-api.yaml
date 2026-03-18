@@ -10,7 +10,17 @@ Redis:
 RabbitMQ:
   URL: amqp://guest:guest@localhost:5672/
   EmailQueue: email_queue
+  LogExchange: log_exchange
+  LocalLogQueue: local_log_queue
+  ESLogQueue: es_log_queue
+Elasticsearch:
+  Addresses:
+    - http://localhost:9200
+  Username: ""
+  Password: ""
+  IndexPrefix: logs
 Casbin:
+
   ModelPath: internal/authorization/model.conf
   PolicyPath: internal/authorization/policy.csv
   

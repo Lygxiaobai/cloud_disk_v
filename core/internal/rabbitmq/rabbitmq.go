@@ -70,6 +70,47 @@ func (r *RabbitMQ) DeclareQueue(queueName string) error {
 	return nil
 }
 
+// DeclareExchange 声明交换机
+// exchangeName: 交换机名称
+// exchangeType: 交换机类型（fanout, direct, topic, headers）
+func (r *RabbitMQ) DeclareExchange(exchangeName string, exchangeType string) error {
+	err := r.channel.ExchangeDeclare(
+		exchangeName, // 交换机名称
+		exchangeType, // 交换机类型
+		true,         // durable: 持久化
+		false,        // autoDelete: 不自动删除
+		false,        // internal: 不是内部交换机
+		false,        // noWait: 等待服务器确认
+		nil,          // arguments: 额外参数
+	)
+	if err != nil {
+		return fmt.Errorf("声明交换机 %s 失败: %w", exchangeName, err)
+	}
+
+	log.Printf("✓ 交换机声明成功: %s (类型: %s)", exchangeName, exchangeType)
+	return nil
+}
+
+// BindQueueToExchange 绑定队列到交换机
+// queueName: 队列名称
+// exchangeName: 交换机名称
+// routingKey: 路由键（fanout 类型可以为空）
+func (r *RabbitMQ) BindQueueToExchange(queueName string, exchangeName string, routingKey string) error {
+	err := r.channel.QueueBind(
+		queueName,    // 队列名称
+		routingKey,   // routing key
+		exchangeName, // 交换机名称
+		false,        // noWait
+		nil,          // arguments
+	)
+	if err != nil {
+		return fmt.Errorf("绑定队列 %s 到交换机 %s 失败: %w", queueName, exchangeName, err)
+	}
+
+	log.Printf("✓ 队列绑定成功: %s -> %s", queueName, exchangeName)
+	return nil
+}
+
 // GetChannel 获取信道（供生产者和消费者使用）
 func (r *RabbitMQ) GetChannel() *amqp.Channel {
 	return r.channel

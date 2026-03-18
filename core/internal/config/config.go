@@ -16,8 +16,17 @@ type Config struct {
 		DB       int
 	}
 	RabbitMQ struct {
-		URL        string
-		EmailQueue string
+		URL           string
+		EmailQueue    string
+		LogExchange   string
+		LocalLogQueue string
+		ESLogQueue    string
+	}
+	Elasticsearch struct {
+		Addresses   []string
+		Username    string
+		Password    string
+		IndexPrefix string
 	}
 	Casbin struct {
 		ModelPath  string
