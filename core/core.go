@@ -27,7 +27,7 @@ func main() {
 		log.Fatalf("初始化日志系统失败: %v", err)
 	}
 	defer logger.Close()
-	log.Println("✅ 日志系统初始化成功")
+	log.Println("日志系统初始化成功")
 
 	var c config.Config
 	conf.MustLoad(*configFile, &c)
