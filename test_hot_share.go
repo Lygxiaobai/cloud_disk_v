@@ -36,29 +36,32 @@ func main() {
 	}
 	fmt.Printf("✓ Redis 连接正常: %s\n\n", pong)
 
-	// 2. 查看热门分享列表
-	fmt.Println("2. 查看 Redis 中的热门分享列表...")
-	hotCount, err := rdb.LLen(ctx, "share:hot:list").Result()
+	// 2. 查看热门分享集合
+	fmt.Println("2. 查看 Redis 中的热门分享集合...")
+	hotCount, err := rdb.SCard(ctx, "share:hot:set").Result()
 	if err != nil {
-		fmt.Printf("✗ 获取热门列表失败: %v\n", err)
+		fmt.Printf("✗ 获取热门集合失败: %v\n", err)
 	} else {
 		fmt.Printf("热门分享数量: %d\n", hotCount)
 		if hotCount > 0 {
-			fmt.Println("✓ 热门分享列表已生成")
-			hotList, _ := rdb.LRange(ctx, "share:hot:list", 0, 9).Result()
+			fmt.Println("✓ 热门分享集合已生成")
+			hotList, _ := rdb.SMembers(ctx, "share:hot:set").Result()
 			fmt.Println("前10个热门分享:")
 			for i, identity := range hotList {
+				if i >= 10 {
+					break
+				}
 				fmt.Printf("  %d. %s\n", i+1, identity)
 			}
 		} else {
-			fmt.Println("✗ 热门分享列表为空")
+			fmt.Println("✗ 热门分享集合为空")
 		}
 	}
 	fmt.Println()
 
-	// 3. 查看热门列表的过期时间
-	fmt.Println("3. 查看热门列表的过期时间...")
-	ttl, err := rdb.TTL(ctx, "share:hot:list").Result()
+	// 3. 查看热门集合的过期时间
+	fmt.Println("3. 查看热门集合的过期时间...")
+	ttl, err := rdb.TTL(ctx, "share:hot:set").Result()
 	if err != nil {
 		fmt.Printf("✗ 获取过期时间失败: %v\n", err)
 	} else if ttl > 0 {
@@ -116,8 +119,9 @@ func main() {
 	// 6. 测试 API 访问（如果有热门分享）
 	if hotCount > 0 {
 		fmt.Println("6. 测试访问热门分享 API...")
-		firstShare, err := rdb.LIndex(ctx, "share:hot:list", 0).Result()
-		if err == nil && firstShare != "" {
+		hotList, _ := rdb.SMembers(ctx, "share:hot:set").Result()
+		if len(hotList) > 0 {
+			firstShare := hotList[0]
 			fmt.Printf("测试分享 identity: %s\n", firstShare)
 			fmt.Println("发送请求...")
 

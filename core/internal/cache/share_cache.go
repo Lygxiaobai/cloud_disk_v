@@ -20,52 +20,67 @@ func NewShareCache(rdb *redis.Client) *ShareCache {
 
 // 缓存 key 定义
 const (
-	// 热门分享列表（存储前100的identity）
-	HotShareListKey = "share:hot:list"
+	// 热门分享集合（存储前100的identity）- 使用 SET 代替 List
+	HotShareSetKey = "share:hot:set"
 	// 分享详情前缀
 	ShareDetailPrefix = "share:detail:"
+	// 日榜点击数前缀
+	DailyClicksPrefix = "share:daily:clicks:"
 	// 缓存过期时间
-	HotShareExpire    = 15 * time.Minute // 热门列表15分钟过期
-	ShareDetailExpire = 1 * time.Hour    // 详情1小时过期   防止用户改文件后redis没有及时更新
+	HotShareExpire    = 15 * time.Minute   // 热门列表15分钟过期
+	ShareDetailExpire = 1 * time.Hour      // 详情1小时过期   防止用户改文件后redis没有及时更新
+	DailyClicksExpire = 7 * 24 * time.Hour // 日榜数据保留7天
 )
 
 // ctx的传入可以通过上下文来控制redis操作超过5s自动取消
-// SetHotShareList 设置热门分享列表（前100的identity）
+// SetHotShareList 设置热门分享集合（前100的identity）- 使用 SET + Pipeline + RENAME 原子操作
 func (c *ShareCache) SetHotShareList(ctx context.Context, identities []string) error {
-	// 删除旧的列表
-	c.rdb.Del(ctx, HotShareListKey)
-
 	// 如果列表为空，直接返回
 	if len(identities) == 0 {
 		return nil
 	}
 
-	// 批量添加到 Redis List
-	for _, identity := range identities {
-		//直接将list存入redis
-		c.rdb.RPush(ctx, HotShareListKey, identity)
-	}
+	// 使用临时 key，避免更新过程中的空窗期
+	tempKey := HotShareSetKey + ":temp"
+
+	// 使用 Pipeline 批量操作，减少网络往返
+	pipe := c.rdb.Pipeline()
+
+	// 删除旧的临时 key（如果存在）
+	pipe.Del(ctx, tempKey)
+
+	// 批量添加到临时 SET
+	pipe.SAdd(ctx, tempKey, identities)
 
 	// 设置过期时间
-	c.rdb.Expire(ctx, HotShareListKey, HotShareExpire)
+	pipe.Expire(ctx, tempKey, HotShareExpire)
+
+	// 执行 Pipeline
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return err
+	}
+
+	// 原子替换：将临时 key 重命名为正式 key
+	// RENAME 是原子操作，不会有空窗期
+	err = c.rdb.Rename(ctx, tempKey, HotShareSetKey).Err()
+	if err != nil {
+		// 如果 RENAME 失败，清理临时 key
+		c.rdb.Del(ctx, tempKey)
+		return err
+	}
 
 	return nil
 }
 
-// IsHotShare 判断是否是热门分享
+// IsHotShare 判断是否是热门分享 - 使用 SISMEMBER，时间复杂度 O(1)
 func (c *ShareCache) IsHotShare(ctx context.Context, identity string) bool {
-	// 检查是否在热门列表中
-	result, err := c.rdb.LRange(ctx, HotShareListKey, 0, -1).Result()
+	// 使用 SISMEMBER 直接判断，无需遍历
+	exists, err := c.rdb.SIsMember(ctx, HotShareSetKey, identity).Result()
 	if err != nil {
 		return false
 	}
-
-	for _, id := range result {
-		if id == identity {
-			return true
-		}
-	}
-	return false
+	return exists
 }
 
 // SetShareDetail 缓存分享详情
@@ -122,4 +137,40 @@ func (c *ShareCache) GetClickNum(ctx context.Context, identity string) (int64, e
 func (c *ShareCache) DeleteShareDetail(ctx context.Context, identity string) error {
 	key := ShareDetailPrefix + identity
 	return c.rdb.Del(ctx, key).Err()
+}
+
+// getTodayKey 获取今日日榜的 Redis key
+func (c *ShareCache) getTodayKey() string {
+	today := time.Now().Format("2006-01-02")
+	return DailyClicksPrefix + today
+}
+
+// IncrDailyClick 增加今日点击数（使用 ZSET）- 限制 ZSET 大小防止内存溢出
+func (c *ShareCache) IncrDailyClick(ctx context.Context, identity string) error {
+	key := c.getTodayKey()
+
+	// 使用 Pipeline 批量操作
+	pipe := c.rdb.Pipeline()
+
+	// 使用 ZINCRBY 增加分数
+	pipe.ZIncrBy(ctx, key, 1, identity)
+
+	// 只保留前1000名，删除其余（防止恶意访问导致内存溢出）
+	// ZREMRANGEBYRANK key 0 -1001 表示删除排名 0 到倒数第1001的元素
+	// 即只保留排名最高的1000个
+	pipe.ZRemRangeByRank(ctx, key, 0, -1001)
+
+	// 设置过期时间（7天后自动清理）
+	pipe.Expire(ctx, key, DailyClicksExpire)
+
+	// 执行 Pipeline
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+// GetDailyTopShares 获取今日热榜前 N 名
+func (c *ShareCache) GetDailyTopShares(ctx context.Context, limit int) ([]string, error) {
+	key := c.getTodayKey()
+	// 使用 ZREVRANGE 按分数从高到低获取
+	return c.rdb.ZRevRange(ctx, key, 0, int64(limit-1)).Result()
 }

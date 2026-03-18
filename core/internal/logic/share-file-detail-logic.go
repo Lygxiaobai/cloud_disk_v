@@ -44,25 +44,32 @@ func (l *ShareFileDetailLogic) ShareFileDetail(req *types.ShareFileDetailRequest
 			logger.LogError(ctx, "从Redis读取分享详情失败", err, map[string]interface{}{
 				"share_identity": req.Identity,
 			})
-			// Redis 读取失败，继续查数据库
 		} else if resp != nil {
 			// 缓存命中，更新点击次数（异步，不影响响应速度）
 			go func() {
-				l.svcCtx.ShareCache.IncrClickNum(context.Background(), req.Identity)
+				// 更新日榜点击数
+				l.svcCtx.ShareCache.IncrDailyClick(context.Background(), req.Identity)
+				// 更新数据库总点击数和更新时间
+				l.svcCtx.Engine.Exec("update share_basic set click_num = click_num + 1, updated_at = NOW() where identity = ?", req.Identity)
 			}()
 			return resp, nil
 		}
 	}
 
 	// 3. 缓存未命中或不是热门分享，查询数据库
-	// 更新点击次数
-	_, err = l.svcCtx.Engine.Exec("update share_basic set click_num = click_num + 1 where identity = ?", req.Identity)
+	// 更新点击次数和更新时间
+	_, err = l.svcCtx.Engine.Exec("update share_basic set click_num = click_num + 1, updated_at = NOW() where identity = ?", req.Identity)
 	if err != nil {
 		logger.LogError(ctx, "更新分享点击次数失败", err, map[string]interface{}{
 			"share_identity": req.Identity,
 		})
 		return nil, err
 	}
+
+	// 更新日榜点击数（异步）
+	go func() {
+		l.svcCtx.ShareCache.IncrDailyClick(context.Background(), req.Identity)
+	}()
 
 	// 查询分享详情
 	resp = &types.ShareFileDetailResponse{}
