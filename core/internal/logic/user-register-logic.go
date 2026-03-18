@@ -39,8 +39,9 @@ func (l *UserRegisterLogic) UserRegister(req *types.UserRegisterRequest) (resp *
 	ctx = context.WithValue(ctx, "path", "/user/register")
 	ctx = context.WithValue(ctx, "trace_id", traceID)
 
-	//判断验证码是否存在且有效
-	code, err := l.svcCtx.RDB.Get(l.ctx, "code").Result()
+	//判断验证码是否存在且有效（key 包含邮箱）
+	redisKey := "code:" + req.Email
+	code, err := l.svcCtx.RDB.Get(l.ctx, redisKey).Result()
 	if err != nil || code != req.Code {
 		err = errors.New("验证码有误")
 		logger.LogError(ctx, "验证码验证失败", err, map[string]interface{}{

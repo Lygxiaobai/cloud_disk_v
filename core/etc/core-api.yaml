@@ -6,7 +6,10 @@ Mysql:
 Redis:
   Addr: 127.0.0.1:6379
   Password: ""
-  DB: 0  
+  DB: 0
+RabbitMQ:
+  URL: amqp://guest:guest@localhost:5672/
+  EmailQueue: email_queue
 Casbin:
   ModelPath: internal/authorization/model.conf
   PolicyPath: internal/authorization/policy.csv

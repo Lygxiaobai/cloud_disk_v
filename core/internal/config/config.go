@@ -15,6 +15,10 @@ type Config struct {
 		Password string
 		DB       int
 	}
+	RabbitMQ struct {
+		URL        string
+		EmailQueue string
+	}
 	Casbin struct {
 		ModelPath  string
 		PolicyPath string
