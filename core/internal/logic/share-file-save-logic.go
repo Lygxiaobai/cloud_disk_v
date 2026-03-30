@@ -27,9 +27,23 @@ func NewShareFileSaveLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Sha
 }
 
 func (l *ShareFileSaveLogic) ShareFileSave(req *types.ShareFileSaveRequest, userIdentity string) (resp *types.ShareFileSaveResponse, err error) {
-	//从公共池获取文件信息
+	sess := l.svcCtx.Engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return nil, errors.New(l.ctx, "start share save transaction failed", err, nil)
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		if rbErr := sess.Rollback(); rbErr != nil {
+			logx.WithContext(l.ctx).Errorf("rollback share save failed: %v", rbErr)
+		}
+	}()
+
 	var rpData = &models.RepositoryPool{}
-	has, err := l.svcCtx.Engine.Where("identity = ?", req.RepositoryIdentity).Get(rpData)
+	has, err := sess.Where("identity = ?", req.RepositoryIdentity).Get(rpData)
 	if err != nil {
 		return nil, errors.New(l.ctx, "查询文件失败", err, map[string]interface{}{
 			"repository_identity": req.RepositoryIdentity,
@@ -41,7 +55,11 @@ func (l *ShareFileSaveLogic) ShareFileSave(req *types.ShareFileSaveRequest, user
 			"reason":              "文件不存在",
 		})
 	}
-	//存储到当前用户中
+
+	if err := ensureNameAvailable(l.ctx, sess, userIdentity, req.ParentId, rpData.Name, ""); err != nil {
+		return nil, err
+	}
+
 	upData := models.UserRepository{
 		Identity:           helper.UUID(),
 		UserIdentity:       userIdentity,
@@ -51,12 +69,17 @@ func (l *ShareFileSaveLogic) ShareFileSave(req *types.ShareFileSaveRequest, user
 		Ext:                rpData.Ext,
 		IsDir:              0,
 	}
-	_, err = l.svcCtx.Engine.Insert(upData)
+	_, err = sess.Insert(&upData)
 	if err != nil {
 		return nil, errors.New(l.ctx, "插入用户文件失败", err, map[string]interface{}{
 			"repository_identity": req.RepositoryIdentity,
 			"parent_id":           req.ParentId,
 		})
 	}
+
+	if err := sess.Commit(); err != nil {
+		return nil, errors.New(l.ctx, "commit share save failed", err, nil)
+	}
+	committed = true
 	return
 }

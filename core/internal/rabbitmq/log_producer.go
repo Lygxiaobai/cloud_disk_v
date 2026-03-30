@@ -22,33 +22,35 @@ type LogMessage struct {
 	Extra      map[string]interface{} `json:"extra,omitempty"`
 }
 
-// LogProducer 日志生产者
+// LogProducer 日志生产者（持有独立的 Channel）
 type LogProducer struct {
-	rabbitmq     *RabbitMQ
+	channel      *amqp.Channel
 	exchangeName string
 }
 
-// NewLogProducer 创建日志生产者
-func NewLogProducer(rabbitmq *RabbitMQ, exchangeName string) *LogProducer {
-	return &LogProducer{
-		rabbitmq:     rabbitmq,
-		exchangeName: exchangeName,
+// NewLogProducer 创建日志生产者，会从连接上创建一个独立的 Channel
+func NewLogProducer(mq *RabbitMQ, exchangeName string) (*LogProducer, error) {
+	ch, err := mq.NewChannel()
+	if err != nil {
+		return nil, fmt.Errorf("创建日志生产者 Channel 失败: %w", err)
 	}
+	return &LogProducer{
+		channel:      ch,
+		exchangeName: exchangeName,
+	}, nil
 }
 
 // SendLogMessage 发送日志消息到交换机（fanout 广播）
 func (p *LogProducer) SendLogMessage(log *LogMessage) error {
-	// 1. 序列化日志消息
 	body, err := json.Marshal(log)
 	if err != nil {
 		return fmt.Errorf("序列化日志消息失败: %w", err)
 	}
 
-	// 2. 发布到 fanout 交换机（routing key 为空）
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = p.rabbitmq.GetChannel().PublishWithContext(
+	err = p.channel.PublishWithContext(
 		ctx,
 		p.exchangeName, // 交换机名称
 		"",             // routing key（fanout 不需要）
@@ -57,14 +59,20 @@ func (p *LogProducer) SendLogMessage(log *LogMessage) error {
 		amqp.Publishing{
 			ContentType:  "application/json",
 			Body:         body,
-			DeliveryMode: amqp.Persistent, // 持久化消息
+			DeliveryMode: amqp.Persistent,
 			Timestamp:    time.Now(),
 		},
 	)
-
 	if err != nil {
 		return fmt.Errorf("发送日志消息到 MQ 失败: %w", err)
 	}
 
 	return nil
+}
+
+// Close 关闭生产者的 Channel
+func (p *LogProducer) Close() {
+	if p.channel != nil {
+		p.channel.Close()
+	}
 }

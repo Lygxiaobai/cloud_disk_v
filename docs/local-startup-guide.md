@@ -65,14 +65,13 @@ http://127.0.0.1:8888
 第一次启动前，如果依赖还没装：
 
 ```powershell
-cd d:\Go_Project\cloud_disk\web
+cd d:\Go_Project\my_cloud_disk\web
 npm.cmd install
 ```
 
 正常启动前端开发服务：
 
-```powershell
-cd d:\Go_Project\cloud_disk\web
+```powershe
 npm.cmd run dev -- --host 127.0.0.1 --port 5173
 ```
 
@@ -123,7 +122,7 @@ New-Item -ItemType Directory -Force .runlogs\nginx\temp\scgi_temp | Out-Null
 
 然后在：
 
-- `d:\Go_Project\cloud_disk\.runlogs\nginx\nginx.conf`
+- `d:\Go_Project\my_cloud_disk\.runlogs\nginx\nginx.conf`
 
 写入下面内容：
 
@@ -142,7 +141,7 @@ http {
     sendfile      on;
     keepalive_timeout 65;
 
-    include D:/Go_Project/cloud_disk/deploy/nginx/cloud-disk.dev.conf.example;
+    include D:/Go_Project/my_cloud_disk/deploy/nginx/cloud-disk.dev.conf.example;
 }
 ```
 
@@ -150,8 +149,8 @@ http {
 
 ```powershell
 & 'C:\Users\38624\AppData\Local\Microsoft\WinGet\Packages\nginxinc.nginx_Microsoft.Winget.Source_8wekyb3d8bbwe\nginx-1.29.6\nginx.exe' `
-  -p 'd:\Go_Project\cloud_disk\.runlogs\nginx\' `
-  -c 'd:\Go_Project\cloud_disk\.runlogs\nginx\nginx.conf' `
+  -p 'd:\Go_Project\my_cloud_disk\.runlogs\nginx\' `
+  -c 'd:\Go_Project\my_cloud_disk\.runlogs\nginx\nginx.conf' `
   -t
 ```
 

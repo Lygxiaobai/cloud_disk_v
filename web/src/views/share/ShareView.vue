@@ -1,51 +1,50 @@
 <template>
   <div class="page-shell share-page">
-    <section class="panel share-shell">
-      <div class="share-copy">
-        <span class="pill">Shared Resource</span>
-        <h1 class="page-title">有人把这个文件分享给你了。</h1>
+    <section class="share-shell">
+      <article class="panel share-copy">
+        <span class="pill">共享文件</span>
+        <h1 class="page-title">有人把这个文件分享给你了</h1>
         <p class="page-subtitle">
-          你可以直接打开，也可以在登录后把它保存到自己指定的目录。
+          你可以直接预览或打开，也可以在登录后把它保存到自己的网盘目录。
         </p>
 
-        <div class="share-meta panel">
+        <div class="meta-grid panel">
           <template v-if="shareStore.detail">
             <div class="meta-row">
-              <span class="muted">文件名</span>
+              <span>文件名</span>
               <strong>{{ shareStore.detail.name }}</strong>
             </div>
             <div class="meta-row">
-              <span class="muted">类型</span>
+              <span>类型</span>
               <strong>{{ shareStore.detail.ext || "文件" }}</strong>
             </div>
             <div class="meta-row">
-              <span class="muted">大小</span>
+              <span>大小</span>
               <strong>{{ formatFileSize(shareStore.detail.size) }}</strong>
             </div>
             <div class="meta-row">
-              <span class="muted">资源地址</span>
+              <span>资源地址</span>
               <strong class="path-text">{{ shareStore.detail.path || "-" }}</strong>
             </div>
           </template>
           <el-skeleton v-else :rows="4" animated />
         </div>
-      </div>
+      </article>
 
-      <div class="panel share-action-card">
-        <h2>操作</h2>
-        <p class="muted">
-          点击保存时，如果还没登录会先跳登录；登录后会回到当前分享页，并展开目录树让你选择保存位置。
-        </p>
+      <article class="panel share-actions">
+        <div class="action-head">
+          <span class="panel-tag">分享操作</span>
+          <h2>如何处理这个文件</h2>
+          <p class="muted">支持直接打开、登录后保存到网盘，或返回文件中心继续管理。</p>
+        </div>
 
         <div class="action-stack">
           <el-button :disabled="!shareStore.detail?.path" size="large" type="primary" @click="openSharedFile">
             直接打开文件
           </el-button>
-
           <el-button plain size="large" @click="handlePrepareSave">
             {{ authStore.isLoggedIn ? "选择目录并保存" : "登录后保存到我的网盘" }}
           </el-button>
-
           <el-button size="large" @click="goToDisk">
             {{ authStore.isLoggedIn ? "进入我的网盘" : "前往登录" }}
           </el-button>
@@ -54,7 +53,7 @@
         <div v-if="authStore.isLoggedIn && showSavePanel" class="save-panel">
           <div class="save-head">
             <strong>选择保存目录</strong>
-            <span class="muted">目录树和网盘页左侧一样，根目录也可以直接选择。</span>
+            <span class="muted">这里复用了网盘页同一套目录树接口，根目录也支持直接选择。</span>
           </div>
 
           <div class="root-option">
@@ -90,7 +89,7 @@
             确认保存到该目录
           </el-button>
         </div>
-      </div>
+      </article>
     </section>
   </div>
 </template>
@@ -285,29 +284,29 @@ async function goToDisk(): Promise<void> {
 
 .share-shell {
   display: grid;
-  gap: 22px;
+  gap: 24px;
   width: min(1180px, 100%);
-  padding: 26px;
-  grid-template-columns: minmax(0, 1.1fr) 360px;
+  grid-template-columns: minmax(0, 1.12fr) 380px;
 }
 
-.share-meta,
-.share-action-card {
+.share-copy,
+.share-actions {
+  padding: 28px;
+}
+
+.meta-grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
   padding: 20px;
+  background: var(--cd-card-strong);
   border-radius: var(--cd-radius-md);
-  background: rgba(255, 252, 247, 0.72);
 }
 
-.share-meta {
-  margin-top: 22px;
-}
-
-.share-action-card h2 {
-  margin-top: 0;
-}
-
-.meta-row + .meta-row {
-  margin-top: 18px;
+.meta-row span {
+  display: block;
+  color: var(--cd-text-soft);
+  font-size: 13px;
 }
 
 .meta-row strong {
@@ -318,6 +317,21 @@ async function goToDisk(): Promise<void> {
 
 .path-text {
   word-break: break-all;
+}
+
+.action-head h2 {
+  margin: 14px 0 8px;
+  font-size: 28px;
+}
+
+.panel-tag {
+  display: inline-flex;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(22, 119, 255, 0.12);
+  color: var(--cd-primary-strong);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .action-stack {
@@ -344,17 +358,17 @@ async function goToDisk(): Promise<void> {
 
 .share-tree {
   padding: 10px 12px;
-  border: 1px solid rgba(31, 107, 79, 0.08);
-  border-radius: 18px;
-  background: rgba(255, 252, 247, 0.6);
+  border: 1px solid var(--cd-border);
+  border-radius: 16px;
+  background: var(--cd-card-strong);
 }
 
 .selected-box {
   display: grid;
   gap: 6px;
   padding: 16px;
-  border-radius: 18px;
-  background: rgba(255, 252, 247, 0.72);
+  border-radius: 16px;
+  background: var(--cd-card-strong);
 }
 
 @media (max-width: 960px) {

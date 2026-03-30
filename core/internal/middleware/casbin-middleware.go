@@ -7,10 +7,10 @@ import (
 )
 
 type CasbinMiddleware struct {
-	enforcer *casbin.Enforcer
+	enforcer *casbin.SyncedEnforcer
 }
 
-func NewCasbinMiddleware(enforcer *casbin.Enforcer) *CasbinMiddleware {
+func NewCasbinMiddleware(enforcer *casbin.SyncedEnforcer) *CasbinMiddleware {
 	return &CasbinMiddleware{enforcer: enforcer}
 }
 

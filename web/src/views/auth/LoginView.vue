@@ -1,60 +1,59 @@
 <template>
   <div class="auth-page page-shell">
-    <section class="auth-grid">
+    <section class="auth-shell">
       <article class="auth-copy">
         <span class="pill">Cloud Disk</span>
-        <h1 class="page-title">Pull files, sharing, and access control into one focused workspace.</h1>
+        <h1 class="page-title">一个更像桌面网盘的在线文件工作区</h1>
         <p class="page-subtitle">
-          This first frontend cut focuses on the main path: sign in, refresh tokens, file listing,
-          uploads, and sharing.
+          登录后可以直接进入文件管理中心，使用上传、预览、最近文件、收藏、批量操作和回收站能力。
         </p>
 
-        <div class="auth-highlights">
-          <div class="auth-feature">
-            <strong>Short-lived access token</strong>
-            <span>Protected APIs use a single `Authorization` header.</span>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <strong>直传 OSS</strong>
+            <span>支持秒传、分片上传、断点续传和自动 STS 续签。</span>
           </div>
-          <div class="auth-feature">
-            <strong>Refresh on demand</strong>
-            <span>`401` triggers a refresh attempt, then replays the original request.</span>
+          <div class="feature-card">
+            <strong>文件预览</strong>
+            <span>图片、视频、音频、PDF 和文本都支持快速预览。</span>
           </div>
-          <div class="auth-feature">
-            <strong>One gateway</strong>
-            <span>The frontend talks to `/api/*` and lets Nginx bridge the backend.</span>
+          <div class="feature-card">
+            <strong>管理体验</strong>
+            <span>搜索、筛选、收藏、回收站和批量操作都已经接入。</span>
           </div>
         </div>
       </article>
 
       <article class="panel auth-card">
         <div class="auth-card-head">
-          <span class="pill auth-pill">Welcome back</span>
-          <h2>Sign in</h2>
-          <p class="muted">Enter your account and jump straight into the drive.</p>
+          <span class="panel-tag">欢迎回来</span>
+          <h2>登录网盘</h2>
+          <p class="muted">输入账号密码，直接进入你的文件空间。</p>
         </div>
 
         <el-form :model="form" label-position="top" @submit.prevent="handleSubmit">
-          <el-form-item label="Username">
-            <el-input v-model.trim="form.name" placeholder="admin" size="large" />
+          <el-form-item label="用户名">
+            <el-input v-model.trim="form.name" placeholder="请输入用户名" size="large" />
           </el-form-item>
 
-          <el-form-item label="Password">
+          <el-form-item label="密码">
             <el-input
               v-model.trim="form.password"
               show-password
-              placeholder="Enter your password"
+              placeholder="请输入密码"
               size="large"
               type="password"
             />
           </el-form-item>
 
           <el-button :loading="submitting" class="auth-submit" native-type="submit" size="large" type="primary">
-            Open my drive
+            进入网盘
           </el-button>
         </el-form>
 
         <div class="auth-footer">
-          <span class="muted">Need an account?</span>
-          <RouterLink to="/register">Create one</RouterLink>
+          <span class="muted">还没有账号？</span>
+          <RouterLink to="/register">立即注册</RouterLink>
         </div>
       </article>
     </section>
@@ -81,7 +80,7 @@ const form = reactive({
 
 async function handleSubmit(): Promise<void> {
   if (!form.name || !form.password) {
-    ElMessage.warning("Please enter both username and password.");
+    ElMessage.warning("请输入用户名和密码。");
     return;
   }
 
@@ -91,12 +90,12 @@ async function handleSubmit(): Promise<void> {
       name: form.name,
       password: form.password,
     });
-    ElMessage.success("Signed in successfully.");
+    ElMessage.success("登录成功。");
 
     const redirect = typeof route.query.redirect === "string" ? route.query.redirect : "/disk";
     await router.replace(redirect);
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "Sign in failed."));
+    ElMessage.error(getErrorMessage(error, "登录失败。"));
   } finally {
     submitting.value = false;
   }
@@ -109,56 +108,65 @@ async function handleSubmit(): Promise<void> {
   place-items: center;
 }
 
-.auth-grid {
+.auth-shell {
   display: grid;
-  gap: 24px;
-  width: min(1180px, 100%);
-  grid-template-columns: minmax(0, 1.1fr) minmax(380px, 460px);
+  gap: 26px;
+  width: min(1200px, 100%);
+  grid-template-columns: minmax(0, 1.15fr) minmax(380px, 440px);
 }
 
 .auth-copy {
-  padding: 38px;
+  padding: 40px 18px 40px 8px;
 }
 
-.auth-highlights {
+.feature-grid {
   display: grid;
   gap: 16px;
-  margin-top: 28px;
+  margin-top: 30px;
 }
 
-.auth-feature {
+.feature-card {
   padding: 18px 20px;
-  border: 1px solid rgba(31, 107, 79, 0.1);
+  border: 1px solid rgba(22, 119, 255, 0.08);
   border-radius: var(--cd-radius-md);
-  background: rgba(255, 251, 245, 0.7);
+  background: rgba(255, 255, 255, 0.72);
 }
 
-.auth-feature strong {
+.feature-card strong {
   display: block;
   margin-bottom: 6px;
   font-size: 16px;
 }
 
+.feature-card span {
+  color: var(--cd-text-soft);
+}
+
 .auth-card {
   align-self: center;
-  padding: 28px;
+  padding: 30px;
 }
 
 .auth-card-head h2 {
-  margin: 16px 0 8px;
+  margin: 14px 0 8px;
   font-size: 30px;
 }
 
-.auth-pill {
-  background: rgba(203, 124, 50, 0.12);
-  color: #9a5c21;
+.panel-tag {
+  display: inline-flex;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(22, 119, 255, 0.12);
+  color: var(--cd-primary-strong);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .auth-submit {
   width: 100%;
   margin-top: 8px;
   border: 0;
-  background: linear-gradient(135deg, var(--cd-primary) 0%, #2a8a67 100%);
+  background: linear-gradient(135deg, var(--cd-primary) 0%, #3d8dff 100%);
 }
 
 .auth-footer {
@@ -169,7 +177,7 @@ async function handleSubmit(): Promise<void> {
 }
 
 @media (max-width: 960px) {
-  .auth-grid {
+  .auth-shell {
     grid-template-columns: 1fr;
   }
 

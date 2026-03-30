@@ -1,72 +1,71 @@
 <template>
   <div class="auth-page page-shell">
-    <section class="auth-grid">
+    <section class="auth-shell register-shell">
       <article class="panel auth-card">
         <div class="auth-card-head">
-          <span class="pill auth-pill">Create account</span>
-          <h2>Register</h2>
-          <p class="muted">Email codes are short-lived, so it is best to complete registration right away.</p>
+          <span class="panel-tag">创建账号</span>
+          <h2>注册网盘账号</h2>
+          <p class="muted">邮箱验证码时效较短，建议收到后尽快完成注册。</p>
         </div>
 
         <el-form :model="form" label-position="top" @submit.prevent="handleSubmit">
-          <el-form-item label="Username">
-            <el-input v-model.trim="form.name" placeholder="Choose a username" size="large" />
+          <el-form-item label="用户名">
+            <el-input v-model.trim="form.name" placeholder="请输入用户名" size="large" />
           </el-form-item>
 
-          <el-form-item label="Email">
+          <el-form-item label="邮箱">
             <el-input v-model.trim="form.email" placeholder="name@example.com" size="large" />
           </el-form-item>
 
-          <el-form-item label="Password">
+          <el-form-item label="密码">
             <el-input
               v-model.trim="form.password"
-              placeholder="Set a password"
+              placeholder="请输入密码"
               show-password
               size="large"
               type="password"
             />
           </el-form-item>
 
-          <el-form-item label="Email code">
+          <el-form-item label="邮箱验证码">
             <div class="code-row">
-              <el-input v-model.trim="form.code" placeholder="Enter the code from email" size="large" />
+              <el-input v-model.trim="form.code" placeholder="请输入验证码" size="large" />
               <el-button :disabled="countdown > 0" :loading="sendingCode" size="large" @click="handleSendCode">
-                {{ countdown > 0 ? `${countdown}s` : "Send code" }}
+                {{ countdown > 0 ? `${countdown}s` : "发送验证码" }}
               </el-button>
             </div>
           </el-form-item>
 
           <el-button :loading="submitting" class="auth-submit" native-type="submit" size="large" type="primary">
-            Register account
+            注册账号
           </el-button>
         </el-form>
 
         <div class="auth-footer">
-          <span class="muted">Already have an account?</span>
-          <RouterLink to="/login">Back to sign in</RouterLink>
+          <span class="muted">已经有账号？</span>
+          <RouterLink to="/login">返回登录</RouterLink>
         </div>
       </article>
 
       <article class="auth-copy">
         <span class="pill">Register Flow</span>
-        <h1 class="page-title">Verify the mailbox first, then attach uploads, folders, and shares to a personal workspace.</h1>
+        <h1 class="page-title">验证邮箱后，把你的上传、目录和分享都归入同一个个人工作区</h1>
         <p class="page-subtitle">
-          The backend already supports send-code, register, sign in, and refresh-token flows. The frontend just needs to
-          connect the state and interaction cleanly.
+          当前前端已经串好了邮箱验证码、注册、登录和刷新令牌流程，注册完成后就能直接使用文件管理能力。
         </p>
 
-        <div class="auth-highlights">
-          <div class="auth-feature">
-            <strong>Email verification</strong>
-            <span>The form maps directly to the existing backend registration flow.</span>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <strong>邮箱验证</strong>
+            <span>前端表单直接对接当前后端的验证码注册流程。</span>
           </div>
-          <div class="auth-feature">
-            <strong>State recovery</strong>
-            <span>Pinia keeps access and refresh tokens stable across page reloads.</span>
+          <div class="feature-card">
+            <strong>状态恢复</strong>
+            <span>Pinia 会持久化令牌，刷新页面后仍可恢复登录状态。</span>
           </div>
-          <div class="auth-feature">
-            <strong>Room to grow</strong>
-            <span>If you later add device sessions or remember-me logic, the structure is already in place.</span>
+          <div class="feature-card">
+            <strong>后续扩展</strong>
+            <span>后面继续加设备管理、登录审计或多端同步也比较顺。</span>
           </div>
         </div>
       </article>
@@ -110,17 +109,17 @@ function startCountdown(): void {
 
 async function handleSendCode(): Promise<void> {
   if (!form.email) {
-    ElMessage.warning("Please enter an email first.");
+    ElMessage.warning("请先输入邮箱。");
     return;
   }
 
   sendingCode.value = true;
   try {
     await authStore.sendRegisterCode(form.email);
-    ElMessage.success("Verification code sent.");
+    ElMessage.success("验证码已发送。");
     startCountdown();
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "Unable to send the verification code."));
+    ElMessage.error(getErrorMessage(error, "发送验证码失败。"));
   } finally {
     sendingCode.value = false;
   }
@@ -128,7 +127,7 @@ async function handleSendCode(): Promise<void> {
 
 async function handleSubmit(): Promise<void> {
   if (!form.name || !form.email || !form.password || !form.code) {
-    ElMessage.warning("Please complete every field.");
+    ElMessage.warning("请完整填写所有字段。");
     return;
   }
 
@@ -140,10 +139,10 @@ async function handleSubmit(): Promise<void> {
       name: form.name,
       password: form.password,
     });
-    ElMessage.success("Account created. You can sign in now.");
+    ElMessage.success("注册成功，请登录。");
     await router.replace("/login");
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "Registration failed."));
+    ElMessage.error(getErrorMessage(error, "注册失败。"));
   } finally {
     submitting.value = false;
   }
@@ -162,49 +161,58 @@ onBeforeUnmount(() => {
   place-items: center;
 }
 
-.auth-grid {
+.auth-shell {
   display: grid;
-  gap: 24px;
-  width: min(1180px, 100%);
-  grid-template-columns: minmax(380px, 460px) minmax(0, 1.1fr);
+  gap: 26px;
+  width: min(1200px, 100%);
+  grid-template-columns: minmax(380px, 450px) minmax(0, 1.15fr);
 }
 
 .auth-copy {
-  padding: 38px;
+  padding: 40px 8px 40px 18px;
 }
 
-.auth-highlights {
+.feature-grid {
   display: grid;
   gap: 16px;
-  margin-top: 28px;
+  margin-top: 30px;
 }
 
-.auth-feature {
+.feature-card {
   padding: 18px 20px;
-  border: 1px solid rgba(31, 107, 79, 0.1);
+  border: 1px solid rgba(22, 119, 255, 0.08);
   border-radius: var(--cd-radius-md);
-  background: rgba(255, 251, 245, 0.7);
+  background: rgba(255, 255, 255, 0.72);
 }
 
-.auth-feature strong {
+.feature-card strong {
   display: block;
   margin-bottom: 6px;
   font-size: 16px;
 }
 
+.feature-card span {
+  color: var(--cd-text-soft);
+}
+
 .auth-card {
   align-self: center;
-  padding: 28px;
+  padding: 30px;
 }
 
 .auth-card-head h2 {
-  margin: 16px 0 8px;
+  margin: 14px 0 8px;
   font-size: 30px;
 }
 
-.auth-pill {
-  background: rgba(31, 107, 79, 0.1);
+.panel-tag {
+  display: inline-flex;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(22, 119, 255, 0.12);
   color: var(--cd-primary-strong);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .code-row {
@@ -217,7 +225,7 @@ onBeforeUnmount(() => {
   width: 100%;
   margin-top: 8px;
   border: 0;
-  background: linear-gradient(135deg, var(--cd-accent) 0%, #e39b55 100%);
+  background: linear-gradient(135deg, var(--cd-primary) 0%, #3d8dff 100%);
 }
 
 .auth-footer {
@@ -228,7 +236,7 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 960px) {
-  .auth-grid {
+  .auth-shell {
     grid-template-columns: 1fr;
   }
 

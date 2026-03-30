@@ -3,13 +3,13 @@ package main
 import (
 	"bytes"
 	"cloud_disk/core/internal/config"
+	"cloud_disk/core/internal/eshttp"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 
-	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/zeromicro/go-zero/core/conf"
 )
 
@@ -23,42 +23,28 @@ var (
 func main() {
 	flag.Parse()
 
-	// 加载配置
 	var c config.Config
 	conf.MustLoad(*configFile, &c)
 
-	// 初始化 ES 客户端
-	cfg := elasticsearch.Config{
-		Addresses: c.Elasticsearch.Addresses,
-	}
-	if c.Elasticsearch.Username != "" {
-		cfg.Username = c.Elasticsearch.Username
-		cfg.Password = c.Elasticsearch.Password
-	}
-
-	esClient, err := elasticsearch.NewClient(cfg)
+	esClient, err := eshttp.NewClient(c.Elasticsearch.Addresses, c.Elasticsearch.Username, c.Elasticsearch.Password)
 	if err != nil {
 		log.Fatalf("初始化 ES 客户端失败: %v", err)
 	}
 
-	// 构建查询
 	query := buildQuery(*level, *traceID)
 
-	// 执行搜索
 	logs, err := searchLogs(esClient, c.Elasticsearch.IndexPrefix, query, *limit)
 	if err != nil {
 		log.Fatalf("搜索日志失败: %v", err)
 	}
 
-	// 打印结果
-	fmt.Printf("\n找到 %d 条日志:\n", len(logs))
+	fmt.Printf("\n找到 %d 条日志\n", len(logs))
 	fmt.Println("========================================")
 	for i, logEntry := range logs {
 		fmt.Printf("\n[%d] %s\n", i+1, formatLog(logEntry))
 	}
 }
 
-// buildQuery 构建查询条件
 func buildQuery(level, traceID string) map[string]interface{} {
 	must := []map[string]interface{}{}
 
@@ -95,8 +81,7 @@ func buildQuery(level, traceID string) map[string]interface{} {
 	}
 }
 
-// searchLogs 搜索日志
-func searchLogs(client *elasticsearch.Client, indexPrefix string, query map[string]interface{}, size int) ([]map[string]interface{}, error) {
+func searchLogs(client *eshttp.Client, indexPrefix string, query map[string]interface{}, size int) ([]map[string]interface{}, error) {
 	ctx := context.Background()
 
 	var buf bytes.Buffer
@@ -104,38 +89,48 @@ func searchLogs(client *elasticsearch.Client, indexPrefix string, query map[stri
 		return nil, fmt.Errorf("编码查询失败: %w", err)
 	}
 
-	res, err := client.Search(
-		client.Search.WithContext(ctx),
-		client.Search.WithIndex(fmt.Sprintf("%s-*", indexPrefix)),
-		client.Search.WithBody(&buf),
-		client.Search.WithSize(size),
-		client.Search.WithSort("timestamp:desc"),
-	)
+	res, err := client.Search(ctx, fmt.Sprintf("%s-*", indexPrefix), &buf, map[string]string{
+		"size": fmt.Sprintf("%d", size),
+		"sort": "timestamp:desc",
+	})
 	if err != nil {
 		return nil, fmt.Errorf("搜索失败: %w", err)
 	}
-	defer res.Body.Close()
-
-	if res.IsError() {
-		return nil, fmt.Errorf("ES 返回错误: %s", res.String())
+	if res.StatusCode >= 400 {
+		return nil, eshttp.ResponseError(res)
 	}
+	defer res.Body.Close()
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 
-	hits := result["hits"].(map[string]interface{})["hits"].([]interface{})
-	logs := make([]map[string]interface{}, 0, len(hits))
-	for _, hit := range hits {
-		source := hit.(map[string]interface{})["_source"].(map[string]interface{})
+	hitsRoot, ok := result["hits"].(map[string]interface{})
+	if !ok {
+		return []map[string]interface{}{}, nil
+	}
+	rawHits, ok := hitsRoot["hits"].([]interface{})
+	if !ok {
+		return []map[string]interface{}{}, nil
+	}
+
+	logs := make([]map[string]interface{}, 0, len(rawHits))
+	for _, hit := range rawHits {
+		hitMap, ok := hit.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		source, ok := hitMap["_source"].(map[string]interface{})
+		if !ok {
+			continue
+		}
 		logs = append(logs, source)
 	}
 
 	return logs, nil
 }
 
-// formatLog 格式化日志输出
 func formatLog(logEntry map[string]interface{}) string {
 	timestamp := logEntry["timestamp"]
 	level := logEntry["level"]

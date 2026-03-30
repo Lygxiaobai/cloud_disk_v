@@ -14,4 +14,6 @@ declare module "vue-router" {
   }
 }
 
+declare module "ali-oss";
+
 export {};

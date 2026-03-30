@@ -33,7 +33,7 @@ func NewShareBasicCreateLogic(ctx context.Context, svcCtx *svc.ServiceContext) *
 func (l *ShareBasicCreateLogic) ShareBasicCreate(req *types.ShareBasicCreateRequest, userIdentity string) (resp *types.ShareBasicCreateResponse, err error) {
 	//根据用户传过来的Identity查找到该记录
 	upData := &models.UserRepository{}
-	has, err := l.svcCtx.Engine.Where("identity = ?", req.UserRepositoryIdentity).Get(upData)
+	has, err := l.svcCtx.Engine.Where("identity = ? AND user_identity = ?", req.UserRepositoryIdentity, userIdentity).Get(upData)
 	if err != nil {
 		return nil, errors.New(l.ctx, "查询文件失败", err, map[string]interface{}{
 			"repository_identity": req.UserRepositoryIdentity,

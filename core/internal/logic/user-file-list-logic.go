@@ -1,20 +1,19 @@
-// Code scaffolded by goctl. Safe to edit.
-// goctl 1.9.2
-
 package logic
 
 import (
 	"cloud_disk/core/internal/define"
 	"cloud_disk/core/internal/errors"
-	"cloud_disk/core/internal/models"
-	"context"
-
 	"cloud_disk/core/internal/svc"
 	"cloud_disk/core/internal/types"
+	"context"
+	"fmt"
+	"strings"
 
 	"github.com/zeromicro/go-zero/core/logx"
 )
 
+// UserFileListLogic 负责网盘主列表查询。
+// 当前版本把搜索、筛选、排序都统一收口到了这个接口中。
 type UserFileListLogic struct {
 	logx.Logger
 	ctx    context.Context
@@ -29,8 +28,14 @@ func NewUserFileListLogic(ctx context.Context, svcCtx *svc.ServiceContext) *User
 	}
 }
 
+// UserFileList 查询用户当前目录下的文件列表，并支持：
+// 1. 目录定位
+// 2. 文件名搜索
+// 3. 文件类型筛选
+// 4. 收藏筛选
+// 5. 排序
+// 6. 分页
 func (l *UserFileListLogic) UserFileList(req *types.UserFileListRequest, userIdentity string) (resp *types.UserFileListResponse, err error) {
-	list := []*types.UserFile{}
 	size := req.Size
 	if size == 0 {
 		size = define.PageSize
@@ -40,53 +45,69 @@ func (l *UserFileListLogic) UserFileList(req *types.UserFileListRequest, userIde
 		page = define.Page
 	}
 	offset := (page - 1) * size
-	parentID := req.Id
 
-	// 优先按目录唯一凭证查询，这样前端进入目录时不需要先知道数据库主键 id。
-	if req.Identity != "" {
-		folder := new(models.UserRepository)
-		has, err := l.svcCtx.Engine.
-			Where("identity = ? AND user_identity = ? AND is_dir = 1", req.Identity, userIdentity).
-			Get(folder)
-		if err != nil {
-			return nil, errors.New(l.ctx, "查询文件夹失败", err, map[string]interface{}{
-				"folder_identity": req.Identity,
-			})
-		}
-		if !has {
-			return nil, errors.New(l.ctx, "查询文件列表失败", nil, map[string]interface{}{
-				"folder_identity": req.Identity,
-				"reason":          "文件夹不存在",
-			})
-		}
-		parentID = int64(folder.Id)
+	sess := l.svcCtx.Engine.NewSession()
+	defer sess.Close()
+
+	parentID, err := resolveParentID(l.ctx, sess, userIdentity, req.Id, req.Identity, false)
+	if err != nil {
+		return nil, err
 	}
 
-	l.svcCtx.Engine.ShowSQL(true)
-	// 1. 查询当前目录下的所有直接子内容，包括文件夹和文件。
-	err = l.svcCtx.Engine.Table("user_repository").Where("user_identity=? AND parent_id =?", userIdentity, parentID).
-		Select("user_repository.id,user_repository.identity,user_repository.repository_identity,user_repository.name,user_repository.ext,user_repository.is_dir,repository_pool.size,repository_pool.path").
-		Join("LEFT", "repository_pool", "user_repository.repository_identity = repository_pool.identity").
-		Limit(size, offset).
-		Where("user_repository.deleted_at IS NULL").
-		Find(&list)
-	if err != nil {
-		return nil, errors.New(l.ctx, "查询文件列表失败", err, map[string]interface{}{
+	// 先拼公共的 where 部分，后面在其基础上逐步追加搜索、收藏和类型过滤条件。
+	whereSQL := `
+FROM user_repository ur
+LEFT JOIN repository_pool rp ON ur.repository_identity = rp.identity
+WHERE ur.user_identity = ?
+  AND ur.parent_id = ?
+  AND ur.deleted_at IS NULL`
+	args := []interface{}{userIdentity, parentID}
+
+	if query := strings.TrimSpace(req.Query); query != "" {
+		whereSQL += " AND ur.name LIKE ?"
+		args = append(args, "%"+query+"%")
+	}
+	if req.FavoriteOnly {
+		whereSQL += " AND ur.is_favorite = 1"
+	}
+	whereSQL += buildFileTypeCondition(req.FileType, "ur")
+
+	// 列表查询与总数查询共用同一套 where 条件，避免数据和统计不一致。
+	listSQL := `
+SELECT
+  ur.id,
+  ur.identity,
+  ur.repository_identity,
+  ur.name,
+  ur.ext,
+  COALESCE(rp.path, '') AS path,
+  COALESCE(rp.size, 0) AS size,
+  ur.is_dir,
+  ur.is_favorite,
+  DATE_FORMAT(ur.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+  DATE_FORMAT(ur.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+` + whereSQL + buildOrderClause(req.OrderBy, req.OrderDir, "ur", "rp", false) + fmt.Sprintf(" LIMIT %d OFFSET %d", size, offset)
+
+	list := make([]*types.UserFile, 0)
+	if err := sess.SQL(listSQL, args...).Find(&list); err != nil {
+		return nil, errors.New(l.ctx, "query file list failed", err, map[string]interface{}{
 			"parent_id": parentID,
-			"page":      page,
-			"size":      size,
 		})
 	}
-	count, err := l.svcCtx.Engine.Where("user_identity=? AND parent_id =?", userIdentity, parentID).Count(&models.UserRepository{})
-	if err != nil {
-		return nil, errors.New(l.ctx, "统计文件数量失败", err, map[string]interface{}{
+
+	var total struct {
+		Count int64 `xorm:"'count'"`
+	}
+	if has, err := sess.SQL("SELECT COUNT(1) AS count "+whereSQL, args...).Get(&total); err != nil {
+		return nil, errors.New(l.ctx, "count file list failed", err, map[string]interface{}{
 			"parent_id": parentID,
 		})
+	} else if !has {
+		total.Count = 0
 	}
-	// 2. 返回当前目录内容列表和总数。
-	resp = &types.UserFileListResponse{
-		list,
-		count,
-	}
-	return
+
+	return &types.UserFileListResponse{
+		List:  list,
+		Count: total.Count,
+	}, nil
 }

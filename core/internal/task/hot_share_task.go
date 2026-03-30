@@ -5,6 +5,7 @@ import (
 	"cloud_disk/core/internal/models"
 	"context"
 	"log"
+	"sync"
 	"time"
 	"xorm.io/xorm"
 )
@@ -12,8 +13,9 @@ import (
 // HotShareTask 热门分享统计任务
 type HotShareTask struct {
 	engine     *xorm.Engine
-	shareCache *cache.ShareCache //redis
+	shareCache *cache.ShareCache // redis
 	stopChan   chan struct{}
+	stopOnce   sync.Once
 }
 
 func NewHotShareTask(engine *xorm.Engine, shareCache *cache.ShareCache) *HotShareTask {
@@ -48,23 +50,22 @@ func (t *HotShareTask) Start() {
 
 // Stop 停止定时任务
 func (t *HotShareTask) Stop() {
-	close(t.stopChan)
-	log.Println("热门分享统计任务已停止")
+	t.stopOnce.Do(func() {
+		close(t.stopChan)
+		log.Println("热门分享统计任务已停止")
+	})
 }
 
 // updateHotShares 更新热门分享列表
 func (t *HotShareTask) updateHotShares() {
 	ctx := context.Background()
 
-	// 从 Redis 日榜获取前 100 的分享
 	identities, err := t.shareCache.GetDailyTopShares(ctx, 100)
 	if err != nil {
 		log.Printf("获取日榜热门分享失败: %v", err)
-
 		return
 	}
 
-	// 如果日榜为空（新的一天或首次启动），从数据库查询今天活跃的分享
 	if len(identities) == 0 {
 		log.Println("日榜为空，从数据库查询今天活跃的分享初始化热榜")
 
@@ -73,8 +74,8 @@ func (t *HotShareTask) updateHotShares() {
 
 		err := t.engine.
 			Where("deleted_at IS NULL").
-			And("DATE(updated_at) = ?", today). // 查询今天更新过的分享
-			OrderBy("click_num DESC").          // 按总点击数排序
+			And("DATE(updated_at) = ?", today).
+			OrderBy("click_num DESC").
 			Limit(100).
 			Find(&shares)
 
@@ -88,7 +89,6 @@ func (t *HotShareTask) updateHotShares() {
 			return
 		}
 
-		// 提取 identity 列表
 		identities = make([]string, 0, len(shares))
 		for _, share := range shares {
 			identities = append(identities, share.Identity)
@@ -97,7 +97,6 @@ func (t *HotShareTask) updateHotShares() {
 		log.Printf("从数据库初始化热榜，共 %d 个今天活跃的分享", len(identities))
 	}
 
-	// 保存到 Redis
 	err = t.shareCache.SetHotShareList(ctx, identities)
 	if err != nil {
 		log.Printf("保存热门分享列表到 Redis 失败: %v", err)

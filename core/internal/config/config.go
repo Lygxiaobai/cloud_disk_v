@@ -32,4 +32,18 @@ type Config struct {
 		ModelPath  string
 		PolicyPath string
 	}
+	OSS OSSConfig
+}
+
+type OSSConfig struct {
+	Region               string
+	Bucket               string
+	Endpoint             string
+	AccessKeyId          string
+	AccessKeySecret      string
+	RoleArn              string
+	ExternalID           string
+	UploadBaseDir        string
+	StsDurationSeconds   int64
+	PreviewExpireSeconds int64
 }

@@ -1,6 +1,3 @@
-// Code scaffolded by goctl. Safe to edit.
-// goctl 1.9.2
-
 package logic
 
 import (
@@ -30,7 +27,6 @@ func NewUserRegisterLogic(ctx context.Context, svcCtx *svc.ServiceContext) *User
 }
 
 func (l *UserRegisterLogic) UserRegister(req *types.UserRegisterRequest) (resp *types.UserRegisterResponse, err error) {
-	//判断验证码是否存在且有效（key 包含邮箱）
 	redisKey := "code:" + req.Email
 	code, err := l.svcCtx.RDB.Get(l.ctx, redisKey).Result()
 	if err != nil || code != req.Code {
@@ -38,12 +34,34 @@ func (l *UserRegisterLogic) UserRegister(req *types.UserRegisterRequest) (resp *
 			"email": req.Email,
 		})
 	}
-	//1.先判断邮箱是否已注册
-	count, err := l.svcCtx.Engine.Where("email=?", req.Email).Count(&models.UserBasic{})
+
+	sess := l.svcCtx.Engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return nil, errors.New(l.ctx, "启动注册事务失败", err, nil)
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		if rbErr := sess.Rollback(); rbErr != nil {
+			logx.WithContext(l.ctx).Errorf("rollback register failed: %v", rbErr)
+		}
+	}()
+
+	count := int64(0)
+	var emailRow struct {
+		Count int64 `xorm:"'count'"`
+	}
+	has, err := sess.SQL("SELECT COUNT(1) AS count FROM user_basic WHERE email = ? FOR UPDATE", req.Email).Get(&emailRow)
 	if err != nil {
 		return nil, errors.New(l.ctx, "查询邮箱失败", err, map[string]interface{}{
 			"email": req.Email,
 		})
+	}
+	if has {
+		count = emailRow.Count
 	}
 	if count > 0 {
 		return nil, errors.New(l.ctx, "用户注册失败", nil, map[string]interface{}{
@@ -51,12 +69,19 @@ func (l *UserRegisterLogic) UserRegister(req *types.UserRegisterRequest) (resp *
 			"reason": "邮箱已被注册",
 		})
 	}
-	//2.判断用户名是否已注册
-	count, err = l.svcCtx.Engine.Where("name=?", req.Name).Count(&models.UserBasic{})
+
+	var nameRow struct {
+		Count int64 `xorm:"'count'"`
+	}
+	has, err = sess.SQL("SELECT COUNT(1) AS count FROM user_basic WHERE name = ? FOR UPDATE", req.Name).Get(&nameRow)
 	if err != nil {
 		return nil, errors.New(l.ctx, "查询用户名失败", err, map[string]interface{}{
 			"username": req.Name,
 		})
+	}
+	count = 0
+	if has {
+		count = nameRow.Count
 	}
 	if count > 0 {
 		return nil, errors.New(l.ctx, "用户注册失败", nil, map[string]interface{}{
@@ -64,19 +89,24 @@ func (l *UserRegisterLogic) UserRegister(req *types.UserRegisterRequest) (resp *
 			"reason":   "用户名已被注册",
 		})
 	}
-	//3.新增一条用户
+
 	user := models.UserBasic{
 		Identity: helper.UUID(),
 		Name:     req.Name,
 		Email:    req.Email,
 		Password: helper.MD5(req.Password),
 	}
-	_, err = l.svcCtx.Engine.InsertOne(&user)
+	_, err = sess.InsertOne(&user)
 	if err != nil {
 		return nil, errors.New(l.ctx, "插入用户失败", err, map[string]interface{}{
 			"username": req.Name,
 			"email":    req.Email,
 		})
 	}
+
+	if err := sess.Commit(); err != nil {
+		return nil, errors.New(l.ctx, "提交注册事务失败", err, nil)
+	}
+	committed = true
 	return
 }

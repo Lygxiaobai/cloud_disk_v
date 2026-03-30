@@ -1,6 +1,3 @@
-// Code scaffolded by goctl. Safe to edit.
-// goctl 1.9.2
-
 package logic
 
 import (
@@ -29,26 +26,41 @@ func NewUserFileNameUpdateLogic(ctx context.Context, svcCtx *svc.ServiceContext)
 }
 
 func (l *UserFileNameUpdateLogic) UserFileNameUpdate(req *types.UserFileNameUpdateRequest, userIdentity string) (resp *types.UserFileNameUpdateResponse, err error) {
-	//当当前目录存在与修改名字相同的文件时，不允许修改
-	count, err := l.svcCtx.Engine.Where("name=? AND parent_id=(select parent_id from user_repository where user_identity = ? and identity =?)", req.Name, userIdentity, req.Identity).Count(&models.UserRepository{})
+	sess := l.svcCtx.Engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return nil, errors.New(l.ctx, "start rename transaction failed", err, nil)
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		if rbErr := sess.Rollback(); rbErr != nil {
+			logx.WithContext(l.ctx).Errorf("rollback rename failed: %v", rbErr)
+		}
+	}()
+
+	file := &models.UserRepository{}
+	has, err := sess.SQL("SELECT * FROM user_repository WHERE identity = ? AND user_identity = ? AND deleted_at IS NULL LIMIT 1 FOR UPDATE", req.Identity, userIdentity).Get(file)
 	if err != nil {
-		return nil, errors.New(l.ctx, "查询文件名失败", err, map[string]interface{}{
-			"new_name":      req.Name,
+		return nil, errors.New(l.ctx, "查询文件失败", err, map[string]interface{}{
 			"file_identity": req.Identity,
 		})
 	}
-	if count > 0 {
+	if !has {
 		return nil, errors.New(l.ctx, "重命名文件失败", nil, map[string]interface{}{
-			"new_name":      req.Name,
 			"file_identity": req.Identity,
-			"reason":        "文件名已存在",
+			"reason":        "文件不存在",
 		})
 	}
 
-	up := models.UserRepository{
-		Name: req.Name,
+	if err := ensureNameAvailable(l.ctx, sess, userIdentity, int64(file.ParentId), req.Name, file.Identity); err != nil {
+		return nil, err
 	}
-	_, err = l.svcCtx.Engine.Where("identity =? AND user_identity =?", req.Identity, userIdentity).Update(&up)
+
+	up := models.UserRepository{Name: req.Name}
+	_, err = sess.Where("identity = ? AND user_identity = ?", req.Identity, userIdentity).Update(&up)
 	if err != nil {
 		return nil, errors.New(l.ctx, "更新文件名失败", err, map[string]interface{}{
 			"new_name":      req.Name,
@@ -56,5 +68,9 @@ func (l *UserFileNameUpdateLogic) UserFileNameUpdate(req *types.UserFileNameUpda
 		})
 	}
 
+	if err := sess.Commit(); err != nil {
+		return nil, errors.New(l.ctx, "commit rename failed", err, nil)
+	}
+	committed = true
 	return
 }

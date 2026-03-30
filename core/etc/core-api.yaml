@@ -23,4 +23,16 @@ Casbin:
 
   ModelPath: internal/authorization/model.conf
   PolicyPath: internal/authorization/policy.csv
+OSS:
+  Region: cn-hangzhou
+  Bucket: lvxiaobai
+  Endpoint: oss-cn-hangzhou.aliyuncs.com
+  AccessKeyId: ""
+  AccessKeySecret: ""
+  RoleArn: "acs:ram::1869042830955493:role/aliyunoss"
+  ExternalID: ""
+  UploadBaseDir: cloud-disk
+  StsDurationSeconds: 3600
+  PreviewExpireSeconds: 1800
+
   

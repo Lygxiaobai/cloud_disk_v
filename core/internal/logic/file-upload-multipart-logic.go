@@ -1,6 +1,3 @@
-// Code scaffolded by goctl. Safe to edit.
-// goctl 1.9.2
-
 package logic
 
 import (
@@ -11,6 +8,7 @@ import (
 
 	"cloud_disk/core/internal/svc"
 	"cloud_disk/core/internal/types"
+
 	"github.com/zeromicro/go-zero/core/logx"
 )
 
@@ -29,18 +27,35 @@ func NewFileUploadMultipartLogic(ctx context.Context, svcCtx *svc.ServiceContext
 }
 
 func (l *FileUploadMultipartLogic) FileUploadMultipart(req *types.FileUploadMultipartRequest, fileBuf []byte) (resp *types.FileUploadMultipartResponse, err error) {
+	sess := l.svcCtx.Engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return nil, errors.New(l.ctx, "启动分片上传事务失败", err, nil)
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		if rbErr := sess.Rollback(); rbErr != nil {
+			logx.WithContext(l.ctx).Errorf("rollback multipart upload failed: %v", rbErr)
+		}
+	}()
+
 	rp := models.RepositoryPool{}
-	has, err := l.svcCtx.Engine.Where("hash =?", req.Hash).Get(&rp)
+	has, err := sess.SQL("SELECT * FROM repository_pool WHERE hash = ? LIMIT 1 FOR UPDATE", req.Hash).Get(&rp)
 	if err != nil {
 		return nil, errors.New(l.ctx, "查询文件哈希失败", err, map[string]interface{}{
 			"hash": req.Hash,
 		})
 	}
 
-	resp = &types.FileUploadMultipartResponse{
-		Identity: rp.Identity,
-	}
+	resp = &types.FileUploadMultipartResponse{Identity: rp.Identity}
 	if has {
+		if err := sess.Commit(); err != nil {
+			return nil, errors.New(l.ctx, "提交分片上传命中事务失败", err, nil)
+		}
+		committed = true
 		return resp, nil
 	}
 
@@ -60,7 +75,7 @@ func (l *FileUploadMultipartLogic) FileUploadMultipart(req *types.FileUploadMult
 		Size:     req.Size,
 		Path:     filePath,
 	}
-	_, err = l.svcCtx.Engine.Insert(&rp)
+	_, err = sess.Insert(&rp)
 	if err != nil {
 		return nil, errors.New(l.ctx, "插入文件记录失败", err, map[string]interface{}{
 			"file_name": req.Name,
@@ -68,7 +83,10 @@ func (l *FileUploadMultipartLogic) FileUploadMultipart(req *types.FileUploadMult
 		})
 	}
 
-	return &types.FileUploadMultipartResponse{
-		Identity: rp.Identity,
-	}, nil
+	if err := sess.Commit(); err != nil {
+		return nil, errors.New(l.ctx, "提交分片上传事务失败", err, nil)
+	}
+	committed = true
+
+	return &types.FileUploadMultipartResponse{Identity: rp.Identity}, nil
 }

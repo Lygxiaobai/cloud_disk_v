@@ -1,6 +1,3 @@
-// Code scaffolded by goctl. Safe to edit.
-// goctl 1.9.2
-
 package svc
 
 import (
@@ -11,6 +8,7 @@ import (
 	"cloud_disk/core/internal/middleware"
 	"cloud_disk/core/internal/models"
 	"cloud_disk/core/internal/rabbitmq"
+	"cloud_disk/core/internal/storage"
 	"cloud_disk/core/internal/task"
 	"log"
 
@@ -21,10 +19,13 @@ import (
 	"xorm.io/xorm"
 )
 
+// ServiceContext 是 go-zero 项目里的依赖注入容器。
+// 所有 handler / logic 都通过它拿到数据库、Redis、OSS、RabbitMQ、中间件等基础能力。
 type ServiceContext struct {
 	Config        config.Config
 	Engine        *xorm.Engine
 	RDB           *redis.Client
+	OSS           *storage.OSSService
 	ShareCache    *cache.ShareCache
 	HotShareTask  *task.HotShareTask
 	RabbitMQ      *rabbitmq.RabbitMQ
@@ -34,49 +35,52 @@ type ServiceContext struct {
 	ErrorRecovery rest.Middleware
 }
 
+// NewServiceContext 在服务启动时统一初始化所有基础依赖。
 func NewServiceContext(c config.Config) *ServiceContext {
 	adapter := fileadapter.NewAdapter(c.Casbin.PolicyPath)
-	enforcer, err := casbin.NewEnforcer(c.Casbin.ModelPath, adapter)
+	enforcer, err := casbin.NewSyncedEnforcer(c.Casbin.ModelPath, adapter)
 	if err != nil {
 		panic(err)
 	}
 
-	// 初始化数据库和 Redis
 	engine := models.Init(c.Mysql.DataSource)
-	rdb := models.InitRedis(c.Redis.Addr)
+	rdb := models.InitRedis(c.Redis.Addr, c.Redis.Password, c.Redis.DB)
+	ossService := storage.NewOSSService(c.OSS)
 
-	// 初始化分享缓存
 	shareCache := cache.NewShareCache(rdb)
-
-	// 初始化热门分享统计任务
 	hotShareTask := task.NewHotShareTask(engine, shareCache)
-	hotShareTask.Start() // 启动定时任务
+	hotShareTask.Start()
 
-	// 初始化 RabbitMQ
-	mq, err := rabbitmq.NewRabbitMQ(c.RabbitMQ.URL)
+	var (
+		mq            *rabbitmq.RabbitMQ
+		emailProducer *rabbitmq.EmailProducer
+	)
+
+	// RabbitMQ 在本地联调阶段允许缺席，
+	// 这样主链路（上传 / 预览 / 列表）不会被邮件和异步日志阻塞。
+	mq, err = rabbitmq.NewRabbitMQ(c.RabbitMQ.URL)
 	if err != nil {
-		log.Fatalf("初始化 RabbitMQ 失败: %v", err)
+		log.Printf("RabbitMQ unavailable, continue without async email/log pipeline: %v", err)
+	} else {
+		if err := mq.DeclareQueue(c.RabbitMQ.EmailQueue); err != nil {
+			log.Printf("declare email queue failed, skip email worker: %v", err)
+		} else {
+			ep, epErr := rabbitmq.NewEmailProducer(mq, c.RabbitMQ.EmailQueue)
+			if epErr != nil {
+				log.Printf("create email producer failed, skip email: %v", epErr)
+			} else {
+				emailProducer = ep
+				startEmailConsumer(mq, c.RabbitMQ.EmailQueue)
+			}
+		}
+		initAsyncLogSystem(mq, c)
 	}
-
-	// 声明邮件队列
-	err = mq.DeclareQueue(c.RabbitMQ.EmailQueue)
-	if err != nil {
-		log.Fatalf("声明邮件队列失败: %v", err)
-	}
-
-	// 创建邮件生产者
-	emailProducer := rabbitmq.NewEmailProducer(mq, c.RabbitMQ.EmailQueue)
-
-	// 启动邮件消费者（在后台 Goroutine 中运行）
-	startEmailConsumer(mq, c.RabbitMQ.EmailQueue)
-
-	// 初始化日志系统（异步模式 - RabbitMQ）
-	initAsyncLogSystem(mq, c)
 
 	return &ServiceContext{
 		Config:        c,
 		Engine:        engine,
 		RDB:           rdb,
+		OSS:           ossService,
 		ShareCache:    shareCache,
 		HotShareTask:  hotShareTask,
 		RabbitMQ:      mq,
@@ -87,72 +91,53 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 }
 
-// startEmailConsumer 启动邮件消费者（在后台运行）
+// startEmailConsumer 在本地 goroutine 中启动邮件消费者。
+// 这样注册发验证码时只负责投递任务，不阻塞当前 HTTP 请求。
 func startEmailConsumer(mq *rabbitmq.RabbitMQ, queueName string) {
-	// 邮件发送处理函数
 	emailHandler := func(email string, code string) error {
-		log.Printf("开始发送邮件: email=%s, code=%s", email, code)
-		err := helper.MailCodeSend(email, code)
-		if err != nil {
-			log.Printf("发送邮件失败: %v", err)
+		log.Printf("start sending email, email=%s", email)
+		if err := helper.MailCodeSend(email, code); err != nil {
+			log.Printf("send email failed: %v", err)
 			return err
 		}
-		log.Printf("邮件发送成功: %s", email)
+		log.Printf("send email success: %s", email)
 		return nil
 	}
 
-	// 创建消费者
 	consumer := rabbitmq.NewEmailConsumer(mq, queueName, emailHandler)
-
-	// 在后台 Goroutine 中启动消费者
 	go func() {
-		log.Printf("✓ 邮件消费者已在后台启动，监听队列: %s", queueName)
-		err := consumer.Start()
-		if err != nil {
-			log.Fatalf("邮件消费者启动失败: %v", err)
+		log.Printf("email consumer started, queue=%s", queueName)
+		if err := consumer.Start(); err != nil {
+			log.Fatalf("start email consumer failed: %v", err)
 		}
 	}()
 }
 
-// initAsyncLogSystem 初始化异步日志系统（使用 RabbitMQ）
+// initAsyncLogSystem 初始化基于 RabbitMQ 的异步日志链路。
 func initAsyncLogSystem(mq *rabbitmq.RabbitMQ, c config.Config) {
-	// 1. 声明日志交换机（fanout 类型）
-	err := mq.DeclareExchange(c.RabbitMQ.LogExchange, "fanout")
-	if err != nil {
-		log.Fatalf("声明日志交换机失败: %v", err)
+	if err := mq.DeclareExchange(c.RabbitMQ.LogExchange, "fanout"); err != nil {
+		log.Fatalf("declare log exchange failed: %v", err)
+	}
+	if err := mq.DeclareQueue(c.RabbitMQ.LocalLogQueue); err != nil {
+		log.Fatalf("declare local log queue failed: %v", err)
+	}
+	if err := mq.DeclareQueue(c.RabbitMQ.ESLogQueue); err != nil {
+		log.Fatalf("declare ES log queue failed: %v", err)
+	}
+	if err := mq.BindQueueToExchange(c.RabbitMQ.LocalLogQueue, c.RabbitMQ.LogExchange, ""); err != nil {
+		log.Fatalf("bind local log queue failed: %v", err)
+	}
+	if err := mq.BindQueueToExchange(c.RabbitMQ.ESLogQueue, c.RabbitMQ.LogExchange, ""); err != nil {
+		log.Fatalf("bind ES log queue failed: %v", err)
 	}
 
-	// 2. 声明本地日志队列
-	err = mq.DeclareQueue(c.RabbitMQ.LocalLogQueue)
+	logProducer, err := rabbitmq.NewLogProducer(mq, c.RabbitMQ.LogExchange)
 	if err != nil {
-		log.Fatalf("声明本地日志队列失败: %v", err)
+		log.Fatalf("create log producer failed: %v", err)
+	}
+	if err := logger.InitAsyncLogger("logs/error.log", logProducer); err != nil {
+		log.Fatalf("initialize async logger failed: %v", err)
 	}
 
-	// 3. 声明 ES 日志队列
-	err = mq.DeclareQueue(c.RabbitMQ.ESLogQueue)
-	if err != nil {
-		log.Fatalf("声明 ES 日志队列失败: %v", err)
-	}
-
-	// 4. 绑定队列到交换机
-	err = mq.BindQueueToExchange(c.RabbitMQ.LocalLogQueue, c.RabbitMQ.LogExchange, "")
-	if err != nil {
-		log.Fatalf("绑定本地日志队列失败: %v", err)
-	}
-
-	err = mq.BindQueueToExchange(c.RabbitMQ.ESLogQueue, c.RabbitMQ.LogExchange, "")
-	if err != nil {
-		log.Fatalf("绑定 ES 日志队列失败: %v", err)
-	}
-
-	// 5. 创建日志生产者
-	logProducer := rabbitmq.NewLogProducer(mq, c.RabbitMQ.LogExchange)
-
-	// 6. 初始化异步日志记录器
-	err = logger.InitAsyncLogger("logs/error.log", logProducer)
-	if err != nil {
-		log.Fatalf("初始化异步日志记录器失败: %v", err)
-	}
-
-	log.Println("✓ 异步日志系统初始化成功（RabbitMQ fanout 模式）")
+	log.Println("async log system initialized")
 }

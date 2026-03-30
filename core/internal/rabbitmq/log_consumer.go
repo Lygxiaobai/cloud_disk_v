@@ -9,15 +9,13 @@ import (
 )
 
 // LogHandler 日志处理函数类型
-// 参数：logMsg（日志消息）
-// 返回：error（处理失败时返回错误）
 type LogHandler func(logMsg *LogMessage) error
 
-// LogConsumer 日志消费者
+// LogConsumer 日志消费者（Start 时创建独立的 Channel）
 type LogConsumer struct {
 	rabbitmq  *RabbitMQ
 	queueName string
-	handler   LogHandler // 日志处理函数
+	handler   LogHandler
 }
 
 // NewLogConsumer 创建日志消费者
@@ -31,12 +29,17 @@ func NewLogConsumer(rabbitmq *RabbitMQ, queueName string, handler LogHandler) *L
 
 // Start 启动消费者（阻塞运行）
 func (c *LogConsumer) Start() error {
-	// 1. 获取消息通道
-	msgs, err := c.rabbitmq.GetChannel().Consume(
+	ch, err := c.rabbitmq.NewChannel()
+	if err != nil {
+		return fmt.Errorf("创建消费者 Channel 失败: %w", err)
+	}
+	defer ch.Close()
+
+	msgs, err := ch.Consume(
 		c.queueName, // 队列名称
-		"",          // consumer: 消费者标识（空字符串表示自动生成）
+		"",          // consumer
 		false,       // autoAck: 手动确认
-		false,       // exclusive: 不独占
+		false,       // exclusive
 		false,       // noLocal
 		false,       // noWait
 		nil,         // args
@@ -45,47 +48,37 @@ func (c *LogConsumer) Start() error {
 		return fmt.Errorf("注册日志消费者失败: %w", err)
 	}
 
-	log.Printf("✓ 日志消费者启动成功，监听队列: %s", c.queueName)
-
-	// 2. 持续监听消息
-	forever := make(chan bool)
-
-	go func() {
-		for msg := range msgs {
-			c.handleMessage(msg)
-		}
-	}()
-
+	log.Printf("日志消费者启动成功，监听队列: %s", c.queueName)
 	log.Println("等待日志消息...")
-	<-forever // 阻塞
 
+	for msg := range msgs {
+		c.handleMessage(msg)
+	}
+
+	log.Println("日志消费者已退出（Channel 已关闭）")
 	return nil
 }
 
 // handleMessage 处理单条消息
 func (c *LogConsumer) handleMessage(msg amqp.Delivery) {
-	// 1. 解析消息
 	var logMsg LogMessage
 	err := json.Unmarshal(msg.Body, &logMsg)
 	if err != nil {
-		log.Printf("✗ 解析日志消息失败: %v, 消息内容: %s", err, string(msg.Body))
-		msg.Nack(false, false) // 拒绝消息，不重新入队
+		log.Printf("解析日志消息失败: %v, 消息内容: %s", err, string(msg.Body))
+		msg.Nack(false, false)
 		return
 	}
 
 	log.Printf("收到日志消息: level=%s, trace_id=%s, message=%s",
 		logMsg.Level, logMsg.TraceID, logMsg.Message)
 
-	// 2. 调用日志处理函数
 	err = c.handler(&logMsg)
 	if err != nil {
-		log.Printf("✗ 处理日志失败: %v", err)
-		msg.Nack(false, true) // 拒绝消息并重新入队
+		log.Printf("处理日志失败: %v", err)
+		msg.Nack(false, true)
 		return
 	}
 
-	log.Printf("✓ 日志处理成功: %s", logMsg.TraceID)
-
-	// 3. 确认消息
+	log.Printf("日志处理成功: %s", logMsg.TraceID)
 	msg.Ack(false)
 }
