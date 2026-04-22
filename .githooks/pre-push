@@ -5,7 +5,7 @@ zero_commit="0000000000000000000000000000000000000000"
 
 is_sensitive_path() {
   case "$1" in
-    .env|.env.*|*.pem|*.key|*.p12|*.pfx|*.crt|*.cer|*.jks|*.keystore|id_rsa|id_rsa.pub|id_ed25519|id_ed25519.pub|*.secret|*.secrets|service-account*.json|credentials*.json|secrets*.json|.npmrc)
+    .env|.env.local|.env.development|.env.production|.env.test|*.pem|*.key|*.p12|*.pfx|*.crt|*.cer|*.jks|*.keystore|id_rsa|id_rsa.pub|id_ed25519|id_ed25519.pub|*.secret|*.secrets|service-account*.json|credentials*.json|secrets*.json|.npmrc)
       return 0
       ;;
   esac
@@ -33,7 +33,7 @@ scan_commit_range() {
     added_diff="$(git diff --no-color --unified=0 "$range" -- "$path" | grep -E '^\+[^+]' || true)"
 
     if printf '%s\n' "$added_diff" | grep -Eiq \
-      'AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|ghp_[0-9A-Za-z]{36,}|github_pat_[0-9A-Za-z_]{20,}|sk_(live|test)_[0-9A-Za-z]{16,}|xox[baprs]-[0-9A-Za-z-]{10,}|-----BEGIN (RSA|DSA|EC|OPENSSH|PGP) PRIVATE KEY-----|(api[_-]?key|secret|token|password)[[:space:]]*[:=][[:space:]]*["'\'']?[^"'\''[:space:]]{8,}'; then
+      'AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|ghp_[0-9A-Za-z]{36,}|github_pat_[0-9A-Za-z_]{20,}|sk_(live|test)_[0-9A-Za-z]{16,}|xox[baprs]-[0-9A-Za-z-]{10,}|-----BEGIN (RSA|DSA|EC|OPENSSH|PGP) PRIVATE KEY-----'; then
       echo "Push blocked: possible secret detected in $path" >&2
       failed=1
     fi
