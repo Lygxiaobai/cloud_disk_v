@@ -12,12 +12,23 @@ import (
 
 var configFile = flag.String("f", "etc/core-api.yaml", "配置文件路径")
 
+// 全局邮件配置（在 main 中初始化，供 emailHandler 使用）
+var mailCfg helper.MailConfig
+
 func main() {
 	flag.Parse()
 
-	// 1. 加载配置
+	// 1. 加载配置（启用环境变量替换）
 	var c config.Config
-	conf.MustLoad(*configFile, &c)
+	conf.MustLoad(*configFile, &c, conf.UseEnv())
+
+	mailCfg = helper.MailConfig{
+		From:       c.Mail.From,
+		Host:       c.Mail.Host,
+		Username:   c.Mail.Username,
+		Password:   c.Mail.Password,
+		ServerName: c.Mail.ServerName,
+	}
 
 	log.Println("==========================================")
 	log.Println("邮件消费者服务启动")
@@ -52,8 +63,7 @@ func main() {
 func emailHandler(email string, code string) error {
 	log.Printf("开始发送邮件: email=%s, code=%s", email, code)
 
-	// 调用 helper 中的邮件发送函数
-	err := helper.MailCodeSend(email, code)
+	err := helper.MailCodeSend(email, code, mailCfg)
 	if err != nil {
 		log.Printf("发送邮件失败: %v", err)
 		return err

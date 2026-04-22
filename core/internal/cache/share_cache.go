@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/sync/singleflight"
 	"time"
 )
 
 // ShareCache 分享缓存管理
 type ShareCache struct {
-	rdb *redis.Client
+	rdb   *redis.Client
+	group singleflight.Group
 }
 
 func NewShareCache(rdb *redis.Client) *ShareCache {
@@ -119,6 +121,37 @@ func (c *ShareCache) GetShareDetail(ctx context.Context, identity string) (*type
 	}
 
 	return &detail, nil
+}
+
+func (c *ShareCache) LoadShareDetail(ctx context.Context, identity string, loader func() (*types.ShareFileDetailResponse, error)) (*types.ShareFileDetailResponse, error) {
+	detail, err := c.GetShareDetail(ctx, identity)
+	if err != nil || detail != nil {
+		return detail, err
+	}
+
+	value, err, _ := c.group.Do(identity, func() (interface{}, error) {
+		cached, cacheErr := c.GetShareDetail(ctx, identity)
+		if cacheErr != nil || cached != nil {
+			return cached, cacheErr
+		}
+
+		loaded, loadErr := loader()
+		if loadErr != nil || loaded == nil {
+			return loaded, loadErr
+		}
+
+		if setErr := c.SetShareDetail(ctx, identity, loaded); setErr != nil {
+			return nil, setErr
+		}
+
+		return loaded, nil
+	})
+	if err != nil || value == nil {
+		return nil, err
+	}
+
+	detail, _ = value.(*types.ShareFileDetailResponse)
+	return detail, nil
 }
 
 // IncrClickNum 增加点击次数（Redis计数）

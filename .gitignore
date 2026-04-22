@@ -36,14 +36,35 @@ logs/
 # Build output
 dist/
 build/
+bin/
 tmp/
+.tmp/
+.gocache/
+.coverprofile
+coverage/
 
 # Environment
 .env
 .env.local
+.env.*
+!.env.example
 
 # Magi cache
 .magi/
 
 # Sanshu memory
 .sanshu-memory/
+
+# Hook output
+.cache/
+
+# Local AI/editor state
+.claude/
+
+# Local analysis artifacts
+pdf_pages/
+/interview_audio.m4a
+/transcript.txt
+/beta_cat_transcript.txt
+/fixed_gb18030_ignore.txt
+/pdf_review_extract*.txt

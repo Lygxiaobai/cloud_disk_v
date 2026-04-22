@@ -10,9 +10,14 @@ p, admin, /user/file/favorite, PUT
 p, admin, /user/file/batch/delete, DELETE
 p, admin, /user/file/batch/move, PUT
 p, admin, /user/file/batch/favorite, PUT
+p, admin, /user/file/batch/rename, PUT
+p, admin, /user/file/version/list/:identity, GET
+p, admin, /user/file/version/restore, PUT
 p, admin, /user/folder/create, PUT
 p, admin, /user/repository/save, POST
 p, admin, /share/basic/create, POST
+p, admin, /share/basic/list, GET
+p, admin, /share/basic/delete, DELETE
 p, admin, /share/file/save, POST
 p, admin, /file/upload, POST
 p, admin, /file/upload/multipart, POST
@@ -35,9 +40,14 @@ p, user, /user/file/favorite, PUT
 p, user, /user/file/batch/delete, DELETE
 p, user, /user/file/batch/move, PUT
 p, user, /user/file/batch/favorite, PUT
+p, user, /user/file/batch/rename, PUT
+p, user, /user/file/version/list/:identity, GET
+p, user, /user/file/version/restore, PUT
 p, user, /user/folder/create, PUT
 p, user, /user/repository/save, POST
 p, user, /share/basic/create, POST
+p, user, /share/basic/list, GET
+p, user, /share/basic/delete, DELETE
 p, user, /share/file/save, POST
 p, user, /file/upload, POST
 p, user, /file/upload/multipart, POST
@@ -53,3 +63,4 @@ p, readonly, /user/file/preview/:identity, GET
 p, readonly, /user/file/recent, GET
 p, readonly, /user/folder/children/:id, GET
 p, readonly, /user/folder/path/:identity, GET
+p, readonly, /user/file/version/list/:identity, GET

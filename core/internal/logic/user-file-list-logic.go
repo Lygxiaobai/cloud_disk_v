@@ -35,6 +35,10 @@ func NewUserFileListLogic(ctx context.Context, svcCtx *svc.ServiceContext) *User
 // 4. 收藏筛选
 // 5. 排序
 // 6. 分页
+//
+// 新增能力：
+// 7. scope=all 时执行全局搜索 / 全局浏览
+// 8. view=duplicates / large 时切到文件治理视图
 func (l *UserFileListLogic) UserFileList(req *types.UserFileListRequest, userIdentity string) (resp *types.UserFileListResponse, err error) {
 	size := req.Size
 	if size == 0 {
@@ -46,22 +50,36 @@ func (l *UserFileListLogic) UserFileList(req *types.UserFileListRequest, userIde
 	}
 	offset := (page - 1) * size
 
+	// “文件治理”视图不再限定当前目录，而是按全盘维度返回治理结果。
+	switch strings.ToLower(strings.TrimSpace(req.View)) {
+	case "duplicates":
+		return l.listDuplicateFiles(req, userIdentity, size, offset)
+	case "large":
+		return l.listLargeFiles(req, userIdentity, size, offset)
+	}
+
 	sess := l.svcCtx.Engine.NewSession()
 	defer sess.Close()
 
-	parentID, err := resolveParentID(l.ctx, sess, userIdentity, req.Id, req.Identity, false)
-	if err != nil {
-		return nil, err
-	}
-
-	// 先拼公共的 where 部分，后面在其基础上逐步追加搜索、收藏和类型过滤条件。
+	// 先拼公共的 where 部分，后面再逐步追加搜索、收藏和类型过滤条件。
 	whereSQL := `
 FROM user_repository ur
 LEFT JOIN repository_pool rp ON ur.repository_identity = rp.identity
 WHERE ur.user_identity = ?
-  AND ur.parent_id = ?
   AND ur.deleted_at IS NULL`
-	args := []interface{}{userIdentity, parentID}
+	args := []interface{}{userIdentity}
+
+	// scope=all 时启用全局搜索 / 全局文件浏览，否则仍保留目录上下文。
+	parentID := int64(0)
+	globalScope := strings.ToLower(strings.TrimSpace(req.Scope)) == "all"
+	if !globalScope {
+		parentID, err = resolveParentID(l.ctx, sess, userIdentity, req.Id, req.Identity, false)
+		if err != nil {
+			return nil, err
+		}
+		whereSQL += " AND ur.parent_id = ?"
+		args = append(args, parentID)
+	}
 
 	if query := strings.TrimSpace(req.Query); query != "" {
 		whereSQL += " AND ur.name LIKE ?"
@@ -90,18 +108,26 @@ SELECT
 
 	list := make([]*types.UserFile, 0)
 	if err := sess.SQL(listSQL, args...).Find(&list); err != nil {
-		return nil, errors.New(l.ctx, "query file list failed", err, map[string]interface{}{
-			"parent_id": parentID,
-		})
+		errorFields := map[string]interface{}{
+			"scope": req.Scope,
+		}
+		if !globalScope {
+			errorFields["parent_id"] = parentID
+		}
+		return nil, errors.New(l.ctx, "query file list failed", err, errorFields)
 	}
 
 	var total struct {
 		Count int64 `xorm:"'count'"`
 	}
 	if has, err := sess.SQL("SELECT COUNT(1) AS count "+whereSQL, args...).Get(&total); err != nil {
-		return nil, errors.New(l.ctx, "count file list failed", err, map[string]interface{}{
-			"parent_id": parentID,
-		})
+		errorFields := map[string]interface{}{
+			"scope": req.Scope,
+		}
+		if !globalScope {
+			errorFields["parent_id"] = parentID
+		}
+		return nil, errors.New(l.ctx, "count file list failed", err, errorFields)
 	} else if !has {
 		total.Count = 0
 	}

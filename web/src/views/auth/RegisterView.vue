@@ -249,4 +249,40 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 600px) {
+  .auth-card {
+    padding: 20px 18px;
+  }
+
+  .auth-card-head h2 {
+    font-size: 22px;
+  }
+
+  .feature-grid {
+    margin-top: 18px;
+    gap: 10px;
+  }
+
+  .feature-card {
+    padding: 14px 16px;
+  }
+
+  .feature-card strong {
+    font-size: 15px;
+  }
+
+  .page-title {
+    font-size: 22px;
+  }
+
+  .page-subtitle {
+    font-size: 14px;
+  }
+
+  .code-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
 </style>

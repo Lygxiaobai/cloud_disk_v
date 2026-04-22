@@ -43,11 +43,16 @@ export interface UserFileListParams {
   favorite_only?: boolean;
   order_by?: string;
   order_dir?: "asc" | "desc";
+  scope?: "folder" | "all";
+  view?: "duplicates" | "large";
+  min_size_mb?: number;
 }
 
 export interface UserFile {
   created_at: string;
   deleted_at?: string;
+  duplicate_count?: number;
+  duplicate_group_size?: number;
   ext: string;
   id: number;
   identity: string;
@@ -98,6 +103,29 @@ export interface RenameFilePayload {
   name: string;
 }
 
+export interface BatchRenamePayload {
+  identities: string[];
+  prefix?: string;
+  suffix?: string;
+  find_text?: string;
+  replace_text?: string;
+  apply_sequence?: boolean;
+  start_index?: number;
+  step?: number;
+  padding?: number;
+  keep_ext?: boolean;
+}
+
+export interface BatchRenameItem {
+  identity: string;
+  old_name: string;
+  new_name: string;
+}
+
+export interface BatchRenameResponse {
+  list: BatchRenameItem[];
+}
+
 export interface DeleteFilePayload {
   identity: string;
 }
@@ -117,14 +145,19 @@ export interface RepositorySavePayload {
 export interface ShareCreatePayload {
   expired_time: number;
   user_repository_identity: string;
+  access_code?: string;
+  allow_download?: number;
 }
 
 export interface ShareCreateResponse {
   identity: string;
+  access_code_set: boolean;
 }
 
 export interface ShareFileDetailResponse {
   ext: string;
+  allow_download: number;
+  need_code: boolean;
   name: string;
   path: string;
   repository_identity: string;
@@ -132,8 +165,39 @@ export interface ShareFileDetailResponse {
 }
 
 export interface ShareFileSavePayload {
+  share_identity?: string;
   parent_id: number;
-  repository_identity: string;
+  repository_identity?: string;
+  access_code?: string;
+}
+
+export interface ShareListParams {
+  page?: number;
+  size?: number;
+  query?: string;
+}
+
+export interface ShareListItem {
+  identity: string;
+  user_file_identity: string;
+  name: string;
+  ext: string;
+  size: number;
+  click_num: number;
+  allow_download: number;
+  access_code_set: boolean;
+  created_at: string;
+  expires_at: string;
+  expired: boolean;
+}
+
+export interface ShareListResponse {
+  count: number;
+  list: ShareListItem[];
+}
+
+export interface ShareDeletePayload {
+  identities: string[];
 }
 
 export interface UploadSTS {
@@ -149,6 +213,7 @@ export interface UploadInitPayload {
   name: string;
   parent_id: number;
   parent_identity?: string;
+  target_file_identity?: string;
   size: number;
 }
 
@@ -217,6 +282,33 @@ export interface BatchMovePayload {
 export interface BatchFavoritePayload {
   identities: string[];
   is_favorite: number;
+}
+
+export interface FileVersionItem {
+  identity: string;
+  file_identity: string;
+  repository_identity: string;
+  name: string;
+  ext: string;
+  size: number;
+  hash: string;
+  action: string;
+  is_current: number;
+  created_at: string;
+}
+
+export interface FileVersionListResponse {
+  list: FileVersionItem[];
+}
+
+export interface FileVersionRestorePayload {
+  file_identity: string;
+  version_identity: string;
+}
+
+export interface FileVersionRestoreResponse {
+  file_identity: string;
+  repository_identity: string;
 }
 
 export interface RecycleListParams {

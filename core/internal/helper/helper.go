@@ -1,20 +1,18 @@
 package helper
 
 import (
-	"bytes"
 	"context"
 	"crypto/md5"
 	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
-	"net/http"
 	"net/smtp"
 	"path"
-	"sort"
-	"sync"
+	"strings"
 	"time"
 
 	"cloud_disk/core/internal/define"
@@ -23,51 +21,84 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jordan-wright/email"
 	uuid "github.com/satori/go.uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const multipartChunkSize = 5 * 1024 * 1024
 
-func MD5(str string) string {
-	return fmt.Sprintf("%x", md5.Sum([]byte(str)))
+type MailConfig struct {
+	From       string
+	Host       string
+	Username   string
+	Password   string
+	ServerName string
 }
 
-func GenerateToken(id int, identity string, name string, role string, expireTime int) (string, error) {
+func HashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
+func CheckPassword(hashed, password string) error {
+	return bcrypt.CompareHashAndPassword([]byte(hashed), []byte(password))
+}
+
+func GenerateToken(id int, identity, name, role, secret string, expireSeconds int) (string, error) {
 	uc := define.UserClaim{
 		ID:       id,
 		Identity: identity,
 		Name:     name,
 		Role:     role,
 		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(time.Second * time.Duration(expireTime)).Unix(),
+			ExpiresAt: time.Now().Add(time.Second * time.Duration(expireSeconds)).Unix(),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, uc)
-	tokenString, err := token.SignedString([]byte(define.JwtKey))
+	tokenString, err := token.SignedString([]byte(secret))
 	if err != nil {
 		return "", err
 	}
 	return tokenString, nil
 }
 
-func MailCodeSend(userEmail string, code string) error {
+func AnalyzeToken(token, secret string) (*define.UserClaim, error) {
+	uc := new(define.UserClaim)
+	claims, err := jwt.ParseWithClaims(token, uc, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !claims.Valid {
+		return nil, errors.New("invalid token")
+	}
+	return uc, nil
+}
+
+func MailCodeSend(userEmail, code string, cfg MailConfig) error {
 	e := email.NewEmail()
-	e.From = "Jordan Wright <18163688304@163.com>"
+	e.From = cfg.From
 	e.To = []string{userEmail}
 	e.Subject = "Verification Code"
 	e.HTML = []byte("<h1>" + code + "</h1>")
 	return e.SendWithTLS(
-		"smtp.163.com:465",
-		smtp.PlainAuth("", "18163688304@163.com", define.MailPassword, "smtp.163.com"),
-		&tls.Config{InsecureSkipVerify: true, ServerName: "smtp.163.com"},
+		cfg.Host,
+		smtp.PlainAuth("", cfg.Username, cfg.Password, cfg.ServerName),
+		&tls.Config{InsecureSkipVerify: true, ServerName: cfg.ServerName},
 	)
 }
 
-func RandCode() string {
+func RandCode(length int) string {
 	const digits = "1234567890"
-
-	code := make([]byte, 0, define.CodeLen)
+	if length <= 0 {
+		length = 6
+	}
+	code := make([]byte, 0, length)
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := 0; i < define.CodeLen; i++ {
+	for i := 0; i < length; i++ {
 		code = append(code, digits[r.Intn(len(digits))])
 	}
 	return string(code)
@@ -77,17 +108,55 @@ func UUID() string {
 	return uuid.NewV4().String()
 }
 
-func FileUpload(r *http.Request) (string, error) {
-	file, header, err := r.FormFile("file")
+func ValidateUploadExt(ext string, blocked []string) error {
+	if ext == "" {
+		return nil
+	}
+	normalized := strings.ToLower(ext)
+	for _, b := range blocked {
+		if strings.ToLower(b) == normalized {
+			return fmt.Errorf("upload of %s is not allowed", ext)
+		}
+	}
+	return nil
+}
+
+func HashAndReset(file io.ReadSeeker, maxSize int64) (string, error) {
+	if file == nil {
+		return "", errors.New("file is empty")
+	}
+
+	hasher := md5.New()
+	reader := io.Reader(file)
+	if maxSize > 0 {
+		reader = io.LimitReader(file, maxSize+1)
+	}
+	written, err := io.Copy(hasher, reader)
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	if maxSize > 0 && written > maxSize {
+		return "", errors.New("file exceeds max upload size")
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
+}
 
-	objectName := "cloud-disk/" + UUID() + path.Ext(header.Filename)
+func FileUpload(fileName string, reader io.Reader) (string, error) {
+	return uploadObject(fileName, reader, "invalid parameters, bucket name required")
+}
+
+func FileUploadMultipart(fileName string, reader io.Reader) (string, error) {
+	return uploadObject(fileName, reader, "invalid parameters, source bucket name required")
+}
+
+func uploadObject(fileName string, reader io.Reader, bucketErr string) (string, error) {
+	objectName := "cloud-disk/" + UUID() + path.Ext(fileName)
 	if len(define.BucketName) == 0 {
 		flag.PrintDefaults()
-		return "", errors.New("invalid parameters, bucket name required")
+		return "", errors.New(bucketErr)
 	}
 	if len(define.Region) == 0 {
 		flag.PrintDefaults()
@@ -106,7 +175,7 @@ func FileUpload(r *http.Request) (string, error) {
 	request := &oss.PutObjectRequest{
 		Bucket: oss.Ptr(define.BucketName),
 		Key:    oss.Ptr(objectName),
-		Body:   file,
+		Body:   reader,
 	}
 	result, err := client.PutObject(context.TODO(), request)
 	if err != nil {
@@ -114,126 +183,6 @@ func FileUpload(r *http.Request) (string, error) {
 	}
 
 	log.Printf("put object result:%#v\n", result)
-	return "https://" + define.BucketName + ".oss-" + define.Region + ".aliyuncs.com/" + objectName, nil
-}
-
-func AnalyzeToken(token string) (*define.UserClaim, error) {
-	uc := new(define.UserClaim)
-	claims, err := jwt.ParseWithClaims(token, uc, func(token *jwt.Token) (interface{}, error) {
-		return []byte(define.JwtKey), nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	if !claims.Valid {
-		return nil, errors.New("invalid token")
-	}
-	return uc, nil
-}
-
-// 文件分片上传
-func FileUploadMultipart(fileName string, fileBuf []byte) (string, error) {
-	if len(fileBuf) == 0 {
-		return "", errors.New("file buffer is empty")
-	}
-
-	objectName := "cloud-disk/" + UUID() + path.Ext(fileName)
-	if len(define.BucketName) == 0 {
-		flag.PrintDefaults()
-		return "", errors.New("invalid parameters, source bucket name required")
-	}
-	if len(define.Region) == 0 {
-		flag.PrintDefaults()
-		return "", errors.New("invalid parameters, region required")
-	}
-	if len(objectName) == 0 {
-		flag.PrintDefaults()
-		return "", errors.New("invalid parameters, source object name required")
-	}
-
-	cfg := oss.LoadDefaultConfig().
-		WithCredentialsProvider(credentials.NewEnvironmentVariableCredentialsProvider()).
-		WithRegion(define.Region)
-	client := oss.NewClient(cfg)
-
-	initRequest := &oss.InitiateMultipartUploadRequest{
-		Bucket: oss.Ptr(define.BucketName),
-		Key:    oss.Ptr(objectName),
-	}
-	initResult, err := client.InitiateMultipartUpload(context.TODO(), initRequest)
-	if err != nil {
-		return "", fmt.Errorf("failed to initiate multipart upload: %w", err)
-	}
-	if initResult.UploadId == nil {
-		return "", errors.New("multipart upload id is empty")
-	}
-
-	log.Printf("initiate multipart upload result:%#v\n", *initResult.UploadId)
-	uploadID := *initResult.UploadId
-
-	chunks, err := buildMultipartRanges(len(fileBuf), multipartChunkSize)
-	if err != nil {
-		return "", err
-	}
-
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	parts := make([]oss.UploadPart, 0, len(chunks))
-	errCh := make(chan error, len(chunks))
-
-	for _, chunk := range chunks {
-		wg.Add(1)
-		go func(chunk multipartRange) {
-			defer wg.Done()
-
-			partRequest := &oss.UploadPartRequest{
-				Bucket:     oss.Ptr(define.BucketName),
-				Key:        oss.Ptr(objectName),
-				PartNumber: chunk.PartNumber,
-				UploadId:   oss.Ptr(uploadID),
-				Body:       bytes.NewReader(fileBuf[chunk.Start:chunk.EndExclusive]),
-			}
-
-			partResult, err := client.UploadPart(context.TODO(), partRequest)
-			if err != nil {
-				errCh <- fmt.Errorf("failed to upload part %d: %w", chunk.PartNumber, err)
-				return
-			}
-
-			mu.Lock()
-			parts = append(parts, oss.UploadPart{
-				PartNumber: partRequest.PartNumber,
-				ETag:       partResult.ETag,
-			})
-			mu.Unlock()
-		}(chunk)
-	}
-
-	wg.Wait()
-	close(errCh)
-	for uploadErr := range errCh {
-		if uploadErr != nil {
-			return "", uploadErr
-		}
-	}
-
-	sort.Slice(parts, func(i, j int) bool {
-		return parts[i].PartNumber < parts[j].PartNumber
-	})
-
-	request := &oss.CompleteMultipartUploadRequest{
-		Bucket:   oss.Ptr(define.BucketName),
-		Key:      oss.Ptr(objectName),
-		UploadId: oss.Ptr(uploadID),
-		CompleteMultipartUpload: &oss.CompleteMultipartUpload{
-			Parts: parts,
-		},
-	}
-	_, err = client.CompleteMultipartUpload(context.TODO(), request)
-	if err != nil {
-		return "", fmt.Errorf("failed to complete multipart upload: %w", err)
-	}
-
 	return "https://" + define.BucketName + ".oss-" + define.Region + ".aliyuncs.com/" + objectName, nil
 }
 

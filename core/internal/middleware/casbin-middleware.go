@@ -1,9 +1,12 @@
 package middleware
 
 import (
+	appErrors "cloud_disk/core/internal/errors"
 	"net/http"
 
 	"github.com/casbin/casbin/v2"
+	"github.com/zeromicro/go-zero/core/logx"
+	"github.com/zeromicro/go-zero/rest/httpx"
 )
 
 type CasbinMiddleware struct {
@@ -18,20 +21,18 @@ func (m *CasbinMiddleware) Handle(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		role := r.Header.Get("UserRole")
 		if role == "" {
-			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte("forbidden: role missing"))
+			httpx.ErrorCtx(r.Context(), w, appErrors.ForbiddenError(r.Context(), "permission denied", nil, nil))
 			return
 		}
 
 		ok, err := m.enforcer.Enforce(role, r.URL.Path, r.Method)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
+			logx.WithContext(r.Context()).Errorf("casbin enforce failed: %v", err)
+			httpx.ErrorCtx(r.Context(), w, appErrors.Internal(r.Context(), "internal server error", err, nil))
 			return
 		}
 		if !ok {
-			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte("forbidden"))
+			httpx.ErrorCtx(r.Context(), w, appErrors.ForbiddenError(r.Context(), "permission denied", nil, nil))
 			return
 		}
 

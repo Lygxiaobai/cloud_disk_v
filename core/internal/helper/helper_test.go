@@ -1,43 +1,57 @@
 package helper
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestBuildMultipartRangesSingleChunk(t *testing.T) {
 	ranges, err := buildMultipartRanges(2, multipartChunkSize)
-	if err != nil {
-		t.Fatalf("buildMultipartRanges returned error: %v", err)
-	}
-	if len(ranges) != 1 {
-		t.Fatalf("expected 1 range, got %d", len(ranges))
-	}
-	if ranges[0].PartNumber != 1 || ranges[0].Start != 0 || ranges[0].EndExclusive != 2 {
-		t.Fatalf("unexpected range: %+v", ranges[0])
-	}
+	require.NoError(t, err)
+	require.Len(t, ranges, 1)
+	require.Equal(t, multipartRange{PartNumber: 1, Start: 0, EndExclusive: 2}, ranges[0])
 }
 
 func TestBuildMultipartRangesSplitByChunkSize(t *testing.T) {
 	ranges, err := buildMultipartRanges(11, 5)
-	if err != nil {
-		t.Fatalf("buildMultipartRanges returned error: %v", err)
-	}
-	if len(ranges) != 3 {
-		t.Fatalf("expected 3 ranges, got %d", len(ranges))
-	}
-
-	expected := []multipartRange{
+	require.NoError(t, err)
+	require.Equal(t, []multipartRange{
 		{PartNumber: 1, Start: 0, EndExclusive: 5},
 		{PartNumber: 2, Start: 5, EndExclusive: 10},
 		{PartNumber: 3, Start: 10, EndExclusive: 11},
-	}
-	for i := range expected {
-		if ranges[i] != expected[i] {
-			t.Fatalf("unexpected range at index %d: got %+v want %+v", i, ranges[i], expected[i])
-		}
-	}
+	}, ranges)
 }
 
 func TestBuildMultipartRangesRejectsEmptyFile(t *testing.T) {
-	if _, err := buildMultipartRanges(0, multipartChunkSize); err == nil {
-		t.Fatal("expected error for empty file size")
-	}
+	_, err := buildMultipartRanges(0, multipartChunkSize)
+	require.Error(t, err)
+}
+
+func TestHashPasswordAndCheckPassword(t *testing.T) {
+	hash, err := HashPassword("secret-123")
+	require.NoError(t, err)
+	require.NotEmpty(t, hash)
+	require.NotEqual(t, "secret-123", hash)
+	require.NoError(t, CheckPassword(hash, "secret-123"))
+	require.Error(t, CheckPassword(hash, "wrong"))
+}
+
+func TestGenerateAndAnalyzeToken(t *testing.T) {
+	token, err := GenerateToken(7, "u-1", "tester", "admin", "secret-key", 60)
+	require.NoError(t, err)
+
+	claims, err := AnalyzeToken(token, "secret-key")
+	require.NoError(t, err)
+	require.Equal(t, 7, claims.ID)
+	require.Equal(t, "u-1", claims.Identity)
+	require.Equal(t, "tester", claims.Name)
+	require.Equal(t, "admin", claims.Role)
+}
+
+func TestValidateUploadExtRejectsBlockedExtension(t *testing.T) {
+	err := ValidateUploadExt(".exe", []string{".exe", ".bat"})
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), ".exe"))
 }

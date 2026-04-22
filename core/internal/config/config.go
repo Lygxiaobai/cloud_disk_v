@@ -32,7 +32,12 @@ type Config struct {
 		ModelPath  string
 		PolicyPath string
 	}
-	OSS OSSConfig
+	OSS       OSSConfig
+	JWT       JWTConfig
+	Mail      MailConfig
+	CORS      CORSConfig
+	Upload    UploadConfig
+	RateLimit RateLimitConfig
 }
 
 type OSSConfig struct {
@@ -46,4 +51,39 @@ type OSSConfig struct {
 	UploadBaseDir        string
 	StsDurationSeconds   int64
 	PreviewExpireSeconds int64
+}
+
+type JWTConfig struct {
+	AccessSecret  string
+	RefreshSecret string
+	AccessExpire  int
+	RefreshExpire int
+}
+
+type MailConfig struct {
+	From       string
+	Host       string
+	Username   string
+	Password   string
+	ServerName string
+	CodeExpire int
+	CodeLen    int
+}
+
+type CORSConfig struct {
+	AllowedOrigins []string
+}
+
+type UploadConfig struct {
+	MaxSize           int64
+	BlockedExtensions []string
+}
+
+type RateLimitConfig struct {
+	LoginPerMinute         int
+	RegisterPerHour        int
+	MailCodePerEmailMinute int
+	MailCodePerEmailHour   int
+	LoginLockThreshold     int
+	LoginLockMinutes       int
 }

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+golangci-lint run ./...
+npm --prefix web run lint
+npm --prefix web run format:check

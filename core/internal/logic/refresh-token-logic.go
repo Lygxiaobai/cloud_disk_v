@@ -4,7 +4,6 @@
 package logic
 
 import (
-	"cloud_disk/core/internal/define"
 	"cloud_disk/core/internal/errors"
 	"cloud_disk/core/internal/helper"
 	"context"
@@ -31,39 +30,40 @@ func NewRefreshTokenLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Refr
 
 func (l *RefreshTokenLogic) RefreshToken(req *types.RefreshTokenRequest) (resp *types.RefreshTokenResponse, err error) {
 	if req.RefreshToken == "" {
-		return nil, errors.New(l.ctx, "刷新Token失败", nil, map[string]interface{}{
-			"reason": "refresh_token为空",
+		return nil, errors.InvalidParam(l.ctx, "refresh token不能为空", nil, map[string]interface{}{
+			"reason": "empty_refresh_token",
 		})
 	}
 
-	// 这里传的是 refreshToken
-	uc, err := helper.AnalyzeToken(req.RefreshToken)
+	jwtCfg := l.svcCtx.Config.JWT
+	uc, err := helper.AnalyzeToken(req.RefreshToken, jwtCfg.RefreshSecret)
 	if err != nil {
-		return nil, errors.New(l.ctx, "解析RefreshToken失败", err, nil)
+		return nil, errors.AuthFailed(l.ctx, "refresh token无效或已过期", err, nil)
 	}
 	if uc == nil {
-		return nil, errors.New(l.ctx, "刷新Token失败", nil, map[string]interface{}{
-			"reason": "无效的refresh_token",
+		return nil, errors.AuthFailed(l.ctx, "refresh token无效或已过期", nil, map[string]interface{}{
+			"reason": "nil_claims",
 		})
 	}
 
-	// 根据 refreshToken 生成新的一组 token
-	token, err := helper.GenerateToken(uc.ID, uc.Identity, uc.Name, uc.Role, define.TokenExpireTime)
+	token, err := helper.GenerateToken(uc.ID, uc.Identity, uc.Name, uc.Role,
+		jwtCfg.AccessSecret, jwtCfg.AccessExpire)
 	if err != nil {
-		return nil, errors.New(l.ctx, "生成Token失败", err, map[string]interface{}{
+		return nil, errors.Internal(l.ctx, "生成Token失败", err, map[string]interface{}{
 			"user_id": uc.ID,
 		})
 	}
-	refreshToken, err := helper.GenerateToken(uc.ID, uc.Identity, uc.Name, uc.Role, define.RefreshTokenExpireTime)
+	refreshToken, err := helper.GenerateToken(uc.ID, uc.Identity, uc.Name, uc.Role,
+		jwtCfg.RefreshSecret, jwtCfg.RefreshExpire)
 	if err != nil {
-		return nil, errors.New(l.ctx, "生成RefreshToken失败", err, map[string]interface{}{
+		return nil, errors.Internal(l.ctx, "生成RefreshToken失败", err, map[string]interface{}{
 			"user_id": uc.ID,
 		})
 	}
+
 	resp = &types.RefreshTokenResponse{
 		Token:        token,
 		RefreshToken: refreshToken,
 	}
-
-	return
+	return resp, nil
 }

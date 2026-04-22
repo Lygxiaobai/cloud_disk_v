@@ -2,32 +2,20 @@ package test
 
 import (
 	"context"
-	"fmt"
-	"github.com/redis/go-redis/v9"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
-var ctx = context.Background()
-var rdb = redis.NewClient(&redis.Options{
-	Addr:     "localhost:6379",
-	Password: "", // no password set
-	DB:       0,  // use default DB
-})
+func TestRedisIntegrationSetGet(t *testing.T) {
+	cfg := requireIntegration(t)
+	svcCtx := newIntegrationServiceContext(t, cfg)
 
-func TestSet(t *testing.T) {
+	err := svcCtx.RDB.Set(context.Background(), "key", "value", 10*time.Second).Err()
+	require.NoError(t, err)
 
-	err := rdb.Set(ctx, "key", "value", time.Second*10).Err()
-	if err != nil {
-		panic(err)
-	}
-
-}
-
-func TestGet(t *testing.T) {
-	val, err := rdb.Get(ctx, "key").Result()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("key", val)
+	val, err := svcCtx.RDB.Get(context.Background(), "key").Result()
+	require.NoError(t, err)
+	require.Equal(t, "value", val)
 }

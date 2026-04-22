@@ -160,3 +160,32 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 600px) {
+  .page-shell {
+    padding: 10px;
+  }
+
+  .page-title {
+    font-size: clamp(22px, 6vw, 30px);
+  }
+
+  .panel {
+    border-radius: 14px;
+  }
+
+  .el-dialog {
+    width: 92vw !important;
+    margin: 5vh auto !important;
+  }
+
+  .el-message-box {
+    width: 88vw !important;
+    max-width: 420px;
+  }
+
+  .el-message {
+    min-width: auto !important;
+    max-width: 90vw;
+  }
+}

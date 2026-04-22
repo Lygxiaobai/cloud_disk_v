@@ -1,11 +1,7 @@
-// Code scaffolded by goctl. Safe to edit.
-// goctl 1.9.2
-
 package logic
 
 import (
 	"cloud_disk/core/internal/errors"
-	"cloud_disk/core/internal/models"
 	"context"
 
 	"cloud_disk/core/internal/svc"
@@ -28,74 +24,46 @@ func NewUserFolderPathLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Us
 	}
 }
 
-// 从当前目录到根目录的路径 然后进行反转
-func (l *UserFolderPathLogic) UserFolderPath(req *types.UserFolderPathRequest, userIdentity string) (resp *types.UserFolderPathResponse, err error) {
-	list := []*types.FolderPathItem{}
-	//identity = ""
-	if req.Identity == "" {
-		list = append(list, &types.FolderPathItem{
-			Identity: "",
-			Name:     "全部文件",
-			Id:       0,
-		})
-		return &types.UserFolderPathResponse{
-			List: list,
-		}, nil
+func (l *UserFolderPathLogic) UserFolderPath(req *types.UserFolderPathRequest, userIdentity string) (*types.UserFolderPathResponse, error) {
+	root := &types.FolderPathItem{
+		Id:       0,
+		Identity: "",
+		Name:     "全部文件",
 	}
-	//identity 有值
-	curr := models.UserRepository{}
-	has, err := l.svcCtx.Engine.Where("identity=? and is_dir = 1 and user_identity = ?", req.Identity, userIdentity).Get(&curr)
-	if err != nil {
-		return nil, errors.New(l.ctx, "查询文件夹失败", err, map[string]interface{}{
+	if req.Identity == "" {
+		return &types.UserFolderPathResponse{List: []*types.FolderPathItem{root}}, nil
+	}
+
+	sql := `
+WITH RECURSIVE folder_path AS (
+	SELECT id, identity, parent_id, name, 0 AS depth
+	FROM user_repository
+	WHERE identity = ? AND user_identity = ? AND is_dir = 1 AND deleted_at IS NULL
+	UNION ALL
+	SELECT parent.id, parent.identity, parent.parent_id, parent.name, folder_path.depth + 1
+	FROM user_repository parent
+	INNER JOIN folder_path ON folder_path.parent_id = parent.id
+	WHERE parent.user_identity = ? AND parent.is_dir = 1 AND parent.deleted_at IS NULL
+)
+SELECT id, identity, name
+FROM folder_path
+ORDER BY depth DESC`
+
+	rows := make([]*types.FolderPathItem, 0)
+	if err := l.svcCtx.Engine.SQL(sql, req.Identity, userIdentity, userIdentity).Find(&rows); err != nil {
+		return nil, errors.New(l.ctx, "查询文件夹路径失败", err, map[string]interface{}{
 			"folder_identity": req.Identity,
 		})
 	}
-	if !has {
+	if len(rows) == 0 {
 		return nil, errors.New(l.ctx, "查询文件夹路径失败", nil, map[string]interface{}{
 			"folder_identity": req.Identity,
-			"reason":          "不是文件夹",
+			"reason":          "folder does not exist",
 		})
 	}
-	for {
-		list = append(list, &types.FolderPathItem{
-			Identity: curr.Identity,
-			Name:     curr.Name,
-			Id:       int64(curr.Id),
-		})
-		if curr.ParentId == 0 {
-			break
-		}
-		parent := models.UserRepository{}
-		has, err = l.svcCtx.Engine.Where("id=? AND user_identity = ? AND is_dir = 1", curr.ParentId, userIdentity).Get(&parent)
-		if err != nil {
-			return nil, errors.New(l.ctx, "查询父级文件夹失败", err, map[string]interface{}{
-				"parent_id": curr.ParentId,
-			})
-		}
-		if !has {
-			return nil, errors.New(l.ctx, "查询文件夹路径失败", nil, map[string]interface{}{
-				"parent_id": curr.ParentId,
-				"reason":    "父级文件夹不存在",
-			})
-		}
-		curr = parent
 
-	}
-	//反转 路径
-	for left, right := 0, len(list)-1; left < right; left, right = left+1, right-1 {
-		list[left], list[right] = list[right], list[left]
-	}
-	// 在最前面补一个虚拟根节点，前端面包屑展示更统一。
-	list = append([]*types.FolderPathItem{
-		{
-			Id:       0,
-			Identity: "",
-			Name:     "全部文件",
-		},
-	}, list...)
-
-	resp = &types.UserFolderPathResponse{
-		List: list,
-	}
-	return
+	list := make([]*types.FolderPathItem, 0, len(rows)+1)
+	list = append(list, root)
+	list = append(list, rows...)
+	return &types.UserFolderPathResponse{List: list}, nil
 }

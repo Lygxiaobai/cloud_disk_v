@@ -1,0 +1,15 @@
+[Unit]
+Description=Cloud Disk Backend
+After=network.target mysql.service redis-server.service
+Wants=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/my_cloud_disk
+EnvironmentFile=/opt/my_cloud_disk/.env
+ExecStart=/opt/my_cloud_disk/bin/cloud-disk -f /opt/my_cloud_disk/core/etc/core-api.yaml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

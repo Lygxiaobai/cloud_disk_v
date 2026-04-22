@@ -8,10 +8,10 @@ export const useShareStore = defineStore("share", () => {
   const detail = ref<ShareFileDetailResponse | null>(null);
   const loading = ref(false);
 
-  async function load(identity: string): Promise<void> {
+  async function load(identity: string, accessCode?: string): Promise<void> {
     loading.value = true;
     try {
-      detail.value = await shareApi.fetchShareDetail(identity);
+      detail.value = await shareApi.fetchShareDetail(identity, accessCode);
     } finally {
       loading.value = false;
     }

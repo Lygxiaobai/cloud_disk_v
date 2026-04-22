@@ -9,15 +9,40 @@ import (
 )
 
 func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
+	// 未鉴权组 —— 高风险接口单独挂限流
+	server.AddRoutes(
+		rest.WithMiddlewares(
+			[]rest.Middleware{serverCtx.ErrorRecovery, serverCtx.LoginRateLimit},
+			[]rest.Route{
+				{Method: http.MethodPost, Path: "/user/login", Handler: UserLoginHandler(serverCtx)},
+			}...,
+		),
+	)
+
+	server.AddRoutes(
+		rest.WithMiddlewares(
+			[]rest.Middleware{serverCtx.ErrorRecovery, serverCtx.RegisterRateLimit},
+			[]rest.Route{
+				{Method: http.MethodPost, Path: "/user/register", Handler: UserRegisterHandler(serverCtx)},
+			}...,
+		),
+	)
+
+	server.AddRoutes(
+		rest.WithMiddlewares(
+			[]rest.Middleware{serverCtx.ErrorRecovery, serverCtx.MailCodeRateLimit},
+			[]rest.Route{
+				{Method: http.MethodPost, Path: "/mail/code/send/register", Handler: MailCodeSendRegisterHandler(serverCtx)},
+			}...,
+		),
+	)
+
 	server.AddRoutes(
 		rest.WithMiddlewares(
 			[]rest.Middleware{serverCtx.ErrorRecovery},
 			[]rest.Route{
-				{Method: http.MethodPost, Path: "/mail/code/send/register", Handler: MailCodeSendRegisterHandler(serverCtx)},
 				{Method: http.MethodPut, Path: "/refresh/token", Handler: RefreshTokenHandler(serverCtx)},
 				{Method: http.MethodGet, Path: "/user/detail", Handler: UserDetailHandler(serverCtx)},
-				{Method: http.MethodPost, Path: "/user/login", Handler: UserLoginHandler(serverCtx)},
-				{Method: http.MethodPost, Path: "/user/register", Handler: UserRegisterHandler(serverCtx)},
 			}...,
 		),
 	)
@@ -32,6 +57,8 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 				{Method: http.MethodPost, Path: "/file/upload/complete", Handler: UploadCompleteHandler(serverCtx)},
 				{Method: http.MethodPost, Path: "/file/upload/sts/refresh", Handler: UploadStsRefreshHandler(serverCtx)},
 				{Method: http.MethodPost, Path: "/share/basic/create", Handler: ShareBasicCreateHandler(serverCtx)},
+				{Method: http.MethodGet, Path: "/share/basic/list", Handler: ShareBasicListHandler(serverCtx)},
+				{Method: http.MethodDelete, Path: "/share/basic/delete", Handler: ShareBasicDeleteHandler(serverCtx)},
 				{Method: http.MethodPost, Path: "/share/file/save", Handler: ShareFileSaveHandler(serverCtx)},
 				{Method: http.MethodDelete, Path: "/user/file/delete", Handler: UserFileDeleteHandler(serverCtx)},
 				{Method: http.MethodGet, Path: "/user/file/list", Handler: UserFileListHandler(serverCtx)},
@@ -42,6 +69,9 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 				{Method: http.MethodDelete, Path: "/user/file/batch/delete", Handler: UserFileBatchDeleteHandler(serverCtx)},
 				{Method: http.MethodPut, Path: "/user/file/batch/move", Handler: UserFileBatchMoveHandler(serverCtx)},
 				{Method: http.MethodPut, Path: "/user/file/batch/favorite", Handler: UserFileBatchFavoriteHandler(serverCtx)},
+				{Method: http.MethodPut, Path: "/user/file/batch/rename", Handler: UserFileBatchRenameHandler(serverCtx)},
+				{Method: http.MethodGet, Path: "/user/file/version/list/:identity", Handler: UserFileVersionListHandler(serverCtx)},
+				{Method: http.MethodPut, Path: "/user/file/version/restore", Handler: UserFileVersionRestoreHandler(serverCtx)},
 				{Method: http.MethodGet, Path: "/user/file/recent", Handler: UserRecentFileListHandler(serverCtx)},
 				{Method: http.MethodGet, Path: "/user/folder/children/:id", Handler: UserFolderChildrenHandler(serverCtx)},
 				{Method: http.MethodPut, Path: "/user/folder/create", Handler: UserFolderCreateHandler(serverCtx)},

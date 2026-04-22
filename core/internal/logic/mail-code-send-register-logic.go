@@ -1,7 +1,6 @@
 package logic
 
 import (
-	"cloud_disk/core/internal/define"
 	"cloud_disk/core/internal/errors"
 	"cloud_disk/core/internal/helper"
 	"cloud_disk/core/internal/models"
@@ -28,37 +27,48 @@ func NewMailCodeSendRegisterLogic(ctx context.Context, svcCtx *svc.ServiceContex
 }
 
 func (l *MailCodeSendRegisterLogic) MailCodeSendRegister(req *types.MailCodeRequest) (*types.MailCodeResponse, error) {
+	mailCfg := l.svcCtx.Config.Mail
+
 	count, err := l.svcCtx.Engine.Where("email = ?", req.Email).Count(&models.UserBasic{})
 	if err != nil {
-		return nil, errors.New(l.ctx, "mail verification failed", err, map[string]interface{}{
+		return nil, errors.Internal(l.ctx, "注册验证码校验失败", err, map[string]interface{}{
 			"email": req.Email,
 		})
 	}
 	if count > 0 {
-		return nil, errors.New(l.ctx, "email already registered", nil, map[string]interface{}{
+		return nil, errors.Conflict(l.ctx, "邮箱已被注册", nil, map[string]interface{}{
 			"email": req.Email,
 		})
 	}
 
-	code := helper.RandCode()
+	code := helper.RandCode(mailCfg.CodeLen)
 	redisKey := "code:" + req.Email
-	if err := l.svcCtx.RDB.Set(l.ctx, redisKey, code, time.Second*time.Duration(define.CodeExpireTime)).Err(); err != nil {
-		return nil, errors.New(l.ctx, "write verification code to redis failed", err, map[string]interface{}{
+	if err := l.svcCtx.RDB.Set(l.ctx, redisKey, code, time.Second*time.Duration(mailCfg.CodeExpire)).Err(); err != nil {
+		return nil, errors.Internal(l.ctx, "写入验证码失败", err, map[string]interface{}{
 			"email": req.Email,
 		})
 	}
 
 	if l.svcCtx.EmailProducer != nil {
 		if err := l.svcCtx.EmailProducer.SendEmailTask(req.Email, code); err != nil {
-			return nil, errors.New(l.ctx, "send email task failed", err, map[string]interface{}{
+			return nil, errors.Internal(l.ctx, "发送邮件任务失败", err, map[string]interface{}{
 				"email": req.Email,
 			})
 		}
-	} else if err := helper.MailCodeSend(req.Email, code); err != nil {
-		return nil, errors.New(l.ctx, "send email failed", err, map[string]interface{}{
-			"email": req.Email,
-		})
+	} else {
+		hc := helper.MailConfig{
+			From:       mailCfg.From,
+			Host:       mailCfg.Host,
+			Username:   mailCfg.Username,
+			Password:   mailCfg.Password,
+			ServerName: mailCfg.ServerName,
+		}
+		if err := helper.MailCodeSend(req.Email, code, hc); err != nil {
+			return nil, errors.Internal(l.ctx, "发送验证码邮件失败", err, map[string]interface{}{
+				"email": req.Email,
+			})
+		}
 	}
 
-	return &types.MailCodeResponse{Code: code}, nil
+	return &types.MailCodeResponse{Message: "验证码已发送到您的邮箱"}, nil
 }

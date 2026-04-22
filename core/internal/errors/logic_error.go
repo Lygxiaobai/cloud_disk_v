@@ -3,7 +3,6 @@ package errors
 import (
 	"cloud_disk/core/internal/logger"
 	"context"
-	"fmt"
 )
 
 // LogicError 业务逻辑错误（自动记录日志）
@@ -12,12 +11,13 @@ type LogicError struct {
 	err     error
 	level   string
 	ctx     context.Context
+	code    int
+	status  int
 }
 
+// Error 只返回用户可见的 message，内部的 err 仅写入日志（由 errors.New/Fatal 自动记录），
+// 避免把数据库 SQL、内部调用栈等敏感信息通过 HTTP 响应泄露。
 func (e *LogicError) Error() string {
-	if e.err != nil {
-		return fmt.Sprintf("%s: %v", e.message, e.err)
-	}
 	return e.message
 }
 
@@ -42,11 +42,15 @@ func New(ctx context.Context, message string, err error, extra map[string]interf
 	// 自动记录 ERROR 日志
 	logger.LogError(ctx, message, err, extra)
 
+	status, code := classify(message, err)
+
 	return &LogicError{
 		message: message,
 		err:     err,
 		level:   "ERROR",
 		ctx:     ctx,
+		code:    code,
+		status:  status,
 	}
 }
 
@@ -70,10 +74,34 @@ func Fatal(ctx context.Context, message string, err error, extra map[string]inte
 	// 自动记录 FATAL 日志
 	logger.LogFatal(ctx, message, err, extra)
 
+	status, code := classify(message, err)
+	if status < 500 {
+		status = 500
+	}
+	if code < 50000 {
+		code = CodeInternalError
+	}
+
 	return &LogicError{
 		message: message,
 		err:     err,
 		level:   "FATAL",
 		ctx:     ctx,
+		code:    code,
+		status:  status,
 	}
+}
+
+func (e *LogicError) StatusCode() int {
+	if e == nil || e.status == 0 {
+		return 500
+	}
+	return e.status
+}
+
+func (e *LogicError) BusinessCode() int {
+	if e == nil || e.code == 0 {
+		return CodeInternalError
+	}
+	return e.code
 }

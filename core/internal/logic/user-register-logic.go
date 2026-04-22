@@ -30,7 +30,7 @@ func (l *UserRegisterLogic) UserRegister(req *types.UserRegisterRequest) (resp *
 	redisKey := "code:" + req.Email
 	code, err := l.svcCtx.RDB.Get(l.ctx, redisKey).Result()
 	if err != nil || code != req.Code {
-		return nil, errors.New(l.ctx, "验证码验证失败", err, map[string]interface{}{
+		return nil, errors.VerificationFailed(l.ctx, "验证码验证失败", err, map[string]interface{}{
 			"email": req.Email,
 		})
 	}
@@ -38,8 +38,9 @@ func (l *UserRegisterLogic) UserRegister(req *types.UserRegisterRequest) (resp *
 	sess := l.svcCtx.Engine.NewSession()
 	defer sess.Close()
 	if err := sess.Begin(); err != nil {
-		return nil, errors.New(l.ctx, "启动注册事务失败", err, nil)
+		return nil, errors.Internal(l.ctx, "启动注册事务失败", err, nil)
 	}
+
 	committed := false
 	defer func() {
 		if committed {
@@ -56,7 +57,7 @@ func (l *UserRegisterLogic) UserRegister(req *types.UserRegisterRequest) (resp *
 	}
 	has, err := sess.SQL("SELECT COUNT(1) AS count FROM user_basic WHERE email = ? FOR UPDATE", req.Email).Get(&emailRow)
 	if err != nil {
-		return nil, errors.New(l.ctx, "查询邮箱失败", err, map[string]interface{}{
+		return nil, errors.Internal(l.ctx, "查询邮箱失败", err, map[string]interface{}{
 			"email": req.Email,
 		})
 	}
@@ -64,9 +65,8 @@ func (l *UserRegisterLogic) UserRegister(req *types.UserRegisterRequest) (resp *
 		count = emailRow.Count
 	}
 	if count > 0 {
-		return nil, errors.New(l.ctx, "用户注册失败", nil, map[string]interface{}{
-			"email":  req.Email,
-			"reason": "邮箱已被注册",
+		return nil, errors.Conflict(l.ctx, "邮箱已被注册", nil, map[string]interface{}{
+			"email": req.Email,
 		})
 	}
 
@@ -75,7 +75,7 @@ func (l *UserRegisterLogic) UserRegister(req *types.UserRegisterRequest) (resp *
 	}
 	has, err = sess.SQL("SELECT COUNT(1) AS count FROM user_basic WHERE name = ? FOR UPDATE", req.Name).Get(&nameRow)
 	if err != nil {
-		return nil, errors.New(l.ctx, "查询用户名失败", err, map[string]interface{}{
+		return nil, errors.Internal(l.ctx, "查询用户名失败", err, map[string]interface{}{
 			"username": req.Name,
 		})
 	}
@@ -84,28 +84,32 @@ func (l *UserRegisterLogic) UserRegister(req *types.UserRegisterRequest) (resp *
 		count = nameRow.Count
 	}
 	if count > 0 {
-		return nil, errors.New(l.ctx, "用户注册失败", nil, map[string]interface{}{
+		return nil, errors.Conflict(l.ctx, "用户名已被注册", nil, map[string]interface{}{
 			"username": req.Name,
-			"reason":   "用户名已被注册",
 		})
+	}
+
+	hashed, err := helper.HashPassword(req.Password)
+	if err != nil {
+		return nil, errors.Internal(l.ctx, "密码加密失败", err, nil)
 	}
 
 	user := models.UserBasic{
 		Identity: helper.UUID(),
 		Name:     req.Name,
 		Email:    req.Email,
-		Password: helper.MD5(req.Password),
+		Password: hashed,
 	}
 	_, err = sess.InsertOne(&user)
 	if err != nil {
-		return nil, errors.New(l.ctx, "插入用户失败", err, map[string]interface{}{
+		return nil, errors.Internal(l.ctx, "插入用户失败", err, map[string]interface{}{
 			"username": req.Name,
 			"email":    req.Email,
 		})
 	}
 
 	if err := sess.Commit(); err != nil {
-		return nil, errors.New(l.ctx, "提交注册事务失败", err, nil)
+		return nil, errors.Internal(l.ctx, "提交注册事务失败", err, nil)
 	}
 	committed = true
 	return

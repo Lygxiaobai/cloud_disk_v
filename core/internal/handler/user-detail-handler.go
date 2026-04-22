@@ -4,9 +4,9 @@
 package handler
 
 import (
-	"errors"
 	"net/http"
 
+	appErrors "cloud_disk/core/internal/errors"
 	"cloud_disk/core/internal/helper"
 	"cloud_disk/core/internal/logic"
 	"cloud_disk/core/internal/svc"
@@ -25,11 +25,11 @@ func UserDetailHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		if req.Identity == "" {
 			token := r.Header.Get("Authorization")
 			if token == "" {
-				httpx.ErrorCtx(r.Context(), w, errors.New("identity or authorization is required"))
+				httpx.ErrorCtx(r.Context(), w, appErrors.New(r.Context(), "identity or authorization is required", nil, nil))
 				return
 			}
 
-			uc, err := helper.AnalyzeToken(token)
+			uc, err := helper.AnalyzeToken(token, svcCtx.Config.JWT.AccessSecret)
 			if err != nil {
 				httpx.ErrorCtx(r.Context(), w, err)
 				return

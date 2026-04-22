@@ -9,12 +9,14 @@ import (
 	"log"
 
 	"cloud_disk/core/internal/config"
+	appErrors "cloud_disk/core/internal/errors"
 	"cloud_disk/core/internal/handler"
 	"cloud_disk/core/internal/logger"
 	"cloud_disk/core/internal/svc"
 
 	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/rest"
+	"github.com/zeromicro/go-zero/rest/httpx"
 )
 
 var configFile = flag.String("f", "etc/core-api.yaml", "the config file")
@@ -30,9 +32,15 @@ func main() {
 	log.Println("日志系统初始化成功")
 
 	var c config.Config
-	conf.MustLoad(*configFile, &c)
+	// UseEnv 让 YAML 中的 ${VAR} 占位符从环境变量读取
+	conf.MustLoad(*configFile, &c, conf.UseEnv())
+	httpx.SetErrorHandlerCtx(appErrors.ErrorResponse)
 
-	server := rest.MustNewServer(c.RestConf)
+	serverOpts := []rest.RunOption{}
+	if len(c.CORS.AllowedOrigins) > 0 {
+		serverOpts = append(serverOpts, rest.WithCors(c.CORS.AllowedOrigins...))
+	}
+	server := rest.MustNewServer(c.RestConf, serverOpts...)
 	defer server.Stop()
 
 	ctx := svc.NewServiceContext(c)

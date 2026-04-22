@@ -34,12 +34,13 @@ type UploadSTS struct {
 }
 
 type UploadInitRequest struct {
-	ParentId       int64  `json:"parent_id,optional"`
-	ParentIdentity string `json:"parent_identity,optional"`
-	Name           string `json:"name"`
-	Ext            string `json:"ext,optional"`
-	Hash           string `json:"hash"`
-	Size           int64  `json:"size"`
+	ParentId           int64  `json:"parent_id,optional"`
+	ParentIdentity     string `json:"parent_identity,optional"`
+	TargetFileIdentity string `json:"target_file_identity,optional"`
+	Name               string `json:"name"`
+	Ext                string `json:"ext,optional"`
+	Hash               string `json:"hash"`
+	Size               int64  `json:"size"`
 }
 
 type UploadInitResponse struct {
@@ -97,7 +98,7 @@ type MailCodeRequest struct {
 }
 
 type MailCodeResponse struct {
-	Code string `json:"code"`
+	Message string `json:"message"`
 }
 
 type RefreshTokenRequest struct {
@@ -112,10 +113,13 @@ type RefreshTokenResponse struct {
 type ShareBasicCreateRequest struct {
 	UserRepositoryIdentity string `json:"user_repository_identity"`
 	ExpiredTime            int    `json:"expired_time"`
+	AccessCode             string `json:"access_code,optional"`
+	AllowDownload          *int   `json:"allow_download,optional"`
 }
 
 type ShareBasicCreateResponse struct {
-	Identity string `json:"identity"`
+	Identity      string `json:"identity"`
+	AccessCodeSet bool   `json:"access_code_set"`
 }
 
 type ShareBasicDetailRequest struct {
@@ -131,7 +135,8 @@ type ShareBasicDetailResponse struct {
 }
 
 type ShareFileDetailRequest struct {
-	Identity string `path:"identity"`
+	Identity   string `path:"identity"`
+	AccessCode string `form:"access_code,optional"`
 }
 
 type ShareFileDetailResponse struct {
@@ -140,16 +145,51 @@ type ShareFileDetailResponse struct {
 	Ext                string `json:"ext"`
 	Size               int64  `json:"size"`
 	Path               string `json:"path"`
+	NeedCode           bool   `json:"need_code"`
+	AllowDownload      int    `json:"allow_download"`
 }
 
 type ShareFileSaveRequest struct {
-	RepositoryIdentity string `json:"repository_identity"`
+	ShareIdentity      string `json:"share_identity,optional"`
+	RepositoryIdentity string `json:"repository_identity,optional"`
+	AccessCode         string `json:"access_code,optional"`
 	ParentId           int64  `json:"parent_id"`
 }
 
 type ShareFileSaveResponse struct {
 	Identity string `json:"identity"`
 }
+
+type ShareBasicListRequest struct {
+	Page  int    `form:"page,optional"`
+	Size  int    `form:"size,optional"`
+	Query string `form:"query,optional"`
+}
+
+type ShareBasicListItem struct {
+	Identity         string `json:"identity"`
+	UserFileIdentity string `json:"user_file_identity"`
+	Name             string `json:"name"`
+	Ext              string `json:"ext"`
+	Size             int64  `json:"size"`
+	ClickNum         int    `json:"click_num"`
+	AllowDownload    int    `json:"allow_download"`
+	AccessCodeSet    bool   `json:"access_code_set"`
+	CreatedAt        string `json:"created_at"`
+	ExpiresAt        string `json:"expires_at"`
+	Expired          bool   `json:"expired"`
+}
+
+type ShareBasicListResponse struct {
+	List  []*ShareBasicListItem `json:"list"`
+	Count int64                 `json:"count"`
+}
+
+type ShareBasicDeleteRequest struct {
+	Identities []string `json:"identities"`
+}
+
+type ShareBasicDeleteResponse struct{}
 
 type UserDetailRequest struct {
 	Identity string `json:"identity, optional"`
@@ -174,6 +214,8 @@ type UserFile struct {
 	UpdatedAt          string `json:"updated_at"`
 	DeletedAt          string `json:"deleted_at,optional"`
 	LastAccessedAt     string `json:"last_accessed_at,optional"`
+	DuplicateCount     int64  `json:"duplicate_count,optional"`
+	DuplicateGroupSize int64  `json:"duplicate_group_size,optional"`
 }
 
 type UserFileDeleteRequest struct {
@@ -192,6 +234,9 @@ type UserFileListRequest struct {
 	FavoriteOnly bool   `form:"favorite_only,optional"`
 	OrderBy      string `form:"order_by,optional"`
 	OrderDir     string `form:"order_dir,optional"`
+	Scope        string `form:"scope,optional"`
+	View         string `form:"view,optional"`
+	MinSizeMB    int64  `form:"min_size_mb,optional"`
 }
 
 type UserFileListResponse struct {
@@ -212,6 +257,60 @@ type UserFileNameUpdateRequest struct {
 }
 
 type UserFileNameUpdateResponse struct{}
+
+type UserFileBatchRenameRequest struct {
+	Identities    []string `json:"identities"`
+	Prefix        string   `json:"prefix,optional"`
+	Suffix        string   `json:"suffix,optional"`
+	FindText      string   `json:"find_text,optional"`
+	ReplaceText   string   `json:"replace_text,optional"`
+	ApplySequence bool     `json:"apply_sequence,optional"`
+	StartIndex    int      `json:"start_index,optional"`
+	Step          int      `json:"step,optional"`
+	Padding       int      `json:"padding,optional"`
+	KeepExt       *bool    `json:"keep_ext,optional"`
+}
+
+type UserFileBatchRenameItem struct {
+	Identity string `json:"identity"`
+	OldName  string `json:"old_name"`
+	NewName  string `json:"new_name"`
+}
+
+type UserFileBatchRenameResponse struct {
+	List []*UserFileBatchRenameItem `json:"list"`
+}
+
+type UserFileVersionListRequest struct {
+	Identity string `path:"identity"`
+}
+
+type UserFileVersionItem struct {
+	Identity           string `json:"identity"`
+	FileIdentity       string `json:"file_identity"`
+	RepositoryIdentity string `json:"repository_identity"`
+	Name               string `json:"name"`
+	Ext                string `json:"ext"`
+	Size               int64  `json:"size"`
+	Hash               string `json:"hash"`
+	Action             string `json:"action"`
+	IsCurrent          int    `json:"is_current"`
+	CreatedAt          string `json:"created_at"`
+}
+
+type UserFileVersionListResponse struct {
+	List []*UserFileVersionItem `json:"list"`
+}
+
+type UserFileVersionRestoreRequest struct {
+	FileIdentity    string `json:"file_identity"`
+	VersionIdentity string `json:"version_identity"`
+}
+
+type UserFileVersionRestoreResponse struct {
+	FileIdentity       string `json:"file_identity"`
+	RepositoryIdentity string `json:"repository_identity"`
+}
 
 type UserFolderChildrenRequest struct {
 	Id int64 `path:"id"`

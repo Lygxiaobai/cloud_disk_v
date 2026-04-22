@@ -42,16 +42,32 @@ func (l *ShareFileSaveLogic) ShareFileSave(req *types.ShareFileSaveRequest, user
 		}
 	}()
 
+	// 新版优先通过 share_identity + access_code 校验分享访问权限，
+	// 这样“保存到我的网盘”就不会绕过分享口令与下载开关。
+	repositoryIdentity := req.RepositoryIdentity
+	if req.ShareIdentity != "" {
+		share, err := validateShareAccess(l.ctx, sess, req.ShareIdentity, req.AccessCode, true)
+		if err != nil {
+			return nil, err
+		}
+		if share.AllowDownload == 0 {
+			return nil, errors.New(l.ctx, "share does not allow saving", nil, map[string]interface{}{
+				"share_identity": req.ShareIdentity,
+			})
+		}
+		repositoryIdentity = share.RepositoryIdentity
+	}
+
 	var rpData = &models.RepositoryPool{}
-	has, err := sess.Where("identity = ?", req.RepositoryIdentity).Get(rpData)
+	has, err := sess.Where("identity = ?", repositoryIdentity).Get(rpData)
 	if err != nil {
 		return nil, errors.New(l.ctx, "查询文件失败", err, map[string]interface{}{
-			"repository_identity": req.RepositoryIdentity,
+			"repository_identity": repositoryIdentity,
 		})
 	}
 	if !has {
 		return nil, errors.New(l.ctx, "保存分享文件失败", nil, map[string]interface{}{
-			"repository_identity": req.RepositoryIdentity,
+			"repository_identity": repositoryIdentity,
 			"reason":              "文件不存在",
 		})
 	}
@@ -64,7 +80,7 @@ func (l *ShareFileSaveLogic) ShareFileSave(req *types.ShareFileSaveRequest, user
 		Identity:           helper.UUID(),
 		UserIdentity:       userIdentity,
 		ParentId:           req.ParentId,
-		RepositoryIdentity: req.RepositoryIdentity,
+		RepositoryIdentity: repositoryIdentity,
 		Name:               rpData.Name,
 		Ext:                rpData.Ext,
 		IsDir:              0,
@@ -72,7 +88,7 @@ func (l *ShareFileSaveLogic) ShareFileSave(req *types.ShareFileSaveRequest, user
 	_, err = sess.Insert(&upData)
 	if err != nil {
 		return nil, errors.New(l.ctx, "插入用户文件失败", err, map[string]interface{}{
-			"repository_identity": req.RepositoryIdentity,
+			"repository_identity": repositoryIdentity,
 			"parent_id":           req.ParentId,
 		})
 	}
@@ -81,5 +97,7 @@ func (l *ShareFileSaveLogic) ShareFileSave(req *types.ShareFileSaveRequest, user
 		return nil, errors.New(l.ctx, "commit share save failed", err, nil)
 	}
 	committed = true
-	return
+	return &types.ShareFileSaveResponse{
+		Identity: upData.Identity,
+	}, nil
 }

@@ -11,6 +11,7 @@ import (
 	"cloud_disk/core/internal/storage"
 	"cloud_disk/core/internal/task"
 	"log"
+	"time"
 
 	"github.com/casbin/casbin/v2"
 	fileadapter "github.com/casbin/casbin/v2/persist/file-adapter"
@@ -22,21 +23,26 @@ import (
 // ServiceContext 是 go-zero 项目里的依赖注入容器。
 // 所有 handler / logic 都通过它拿到数据库、Redis、OSS、RabbitMQ、中间件等基础能力。
 type ServiceContext struct {
-	Config        config.Config
-	Engine        *xorm.Engine
-	RDB           *redis.Client
-	OSS           *storage.OSSService
-	ShareCache    *cache.ShareCache
-	HotShareTask  *task.HotShareTask
-	RabbitMQ      *rabbitmq.RabbitMQ
-	EmailProducer *rabbitmq.EmailProducer
-	Auth          rest.Middleware
-	Casbin        rest.Middleware
-	ErrorRecovery rest.Middleware
+	Config            config.Config
+	Engine            *xorm.Engine
+	RDB               *redis.Client
+	OSS               *storage.OSSService
+	ShareCache        *cache.ShareCache
+	HotShareTask      *task.HotShareTask
+	RabbitMQ          *rabbitmq.RabbitMQ
+	EmailProducer     *rabbitmq.EmailProducer
+	Auth              rest.Middleware
+	Casbin            rest.Middleware
+	ErrorRecovery     rest.Middleware
+	LoginRateLimit    rest.Middleware
+	RegisterRateLimit rest.Middleware
+	MailCodeRateLimit rest.Middleware
 }
 
 // NewServiceContext 在服务启动时统一初始化所有基础依赖。
 func NewServiceContext(c config.Config) *ServiceContext {
+	validateSecurityConfig(&c)
+
 	adapter := fileadapter.NewAdapter(c.Casbin.PolicyPath)
 	enforcer, err := casbin.NewSyncedEnforcer(c.Casbin.ModelPath, adapter)
 	if err != nil {
@@ -70,33 +76,97 @@ func NewServiceContext(c config.Config) *ServiceContext {
 				log.Printf("create email producer failed, skip email: %v", epErr)
 			} else {
 				emailProducer = ep
-				startEmailConsumer(mq, c.RabbitMQ.EmailQueue)
+				startEmailConsumer(mq, c.RabbitMQ.EmailQueue, c.Mail)
 			}
 		}
 		initAsyncLogSystem(mq, c)
 	}
 
+	// 限流中间件 —— 只挂在未鉴权且高风险接口上
+	loginLimiter := middleware.NewRateLimitMiddleware(
+		rdb,
+		middleware.IPKey("/user/login"),
+		c.RateLimit.LoginPerMinute,
+		time.Minute,
+	)
+	registerLimiter := middleware.NewRateLimitMiddleware(
+		rdb,
+		middleware.IPKey("/user/register"),
+		c.RateLimit.RegisterPerHour,
+		time.Hour,
+	)
+	// 邮箱验证码以"邮箱 + 一分钟"为窗口；另外按小时维度再挂一层
+	mailCodeLimiter := middleware.NewRateLimitMiddleware(
+		rdb,
+		middleware.EmailKey("/mail/code/send/register"),
+		c.RateLimit.MailCodePerEmailMinute,
+		time.Minute,
+	)
+
 	return &ServiceContext{
-		Config:        c,
-		Engine:        engine,
-		RDB:           rdb,
-		OSS:           ossService,
-		ShareCache:    shareCache,
-		HotShareTask:  hotShareTask,
-		RabbitMQ:      mq,
-		EmailProducer: emailProducer,
-		Auth:          middleware.NewAuthMiddleware().Handle,
-		Casbin:        middleware.NewCasbinMiddleware(enforcer).Handle,
-		ErrorRecovery: middleware.NewErrorRecoveryMiddleware().Handle,
+		Config:            c,
+		Engine:            engine,
+		RDB:               rdb,
+		OSS:               ossService,
+		ShareCache:        shareCache,
+		HotShareTask:      hotShareTask,
+		RabbitMQ:          mq,
+		EmailProducer:     emailProducer,
+		Auth:              middleware.NewAuthMiddleware(c.JWT.AccessSecret).Handle,
+		Casbin:            middleware.NewCasbinMiddleware(enforcer).Handle,
+		ErrorRecovery:     middleware.NewErrorRecoveryMiddleware().Handle,
+		LoginRateLimit:    loginLimiter.Handle,
+		RegisterRateLimit: registerLimiter.Handle,
+		MailCodeRateLimit: mailCodeLimiter.Handle,
+	}
+}
+
+// validateSecurityConfig 在启动时校验关键安全配置；为空时 dev 回退到明显可辨的占位值并 warn。
+func validateSecurityConfig(c *config.Config) {
+	if c.JWT.AccessSecret == "" {
+		log.Println("警告: JWT.AccessSecret 未设置（JWT_ACCESS_SECRET 环境变量）。使用开发占位，生产必须重设！")
+		c.JWT.AccessSecret = "dev-access-secret-INSECURE-DO-NOT-USE-IN-PROD"
+	}
+	if c.JWT.RefreshSecret == "" {
+		log.Println("警告: JWT.RefreshSecret 未设置（JWT_REFRESH_SECRET 环境变量）。使用开发占位，生产必须重设！")
+		c.JWT.RefreshSecret = "dev-refresh-secret-INSECURE-DO-NOT-USE-IN-PROD"
+	}
+	if c.JWT.AccessSecret == c.JWT.RefreshSecret {
+		log.Fatal("JWT.AccessSecret 与 JWT.RefreshSecret 不能相同")
+	}
+	if c.JWT.AccessExpire <= 0 {
+		c.JWT.AccessExpire = 3600
+	}
+	if c.JWT.RefreshExpire <= 0 {
+		c.JWT.RefreshExpire = 7200
+	}
+	if c.Mail.CodeExpire <= 0 {
+		c.Mail.CodeExpire = 300
+	}
+	if c.Mail.CodeLen <= 0 {
+		c.Mail.CodeLen = 6
+	}
+	if c.Upload.MaxSize <= 0 {
+		c.Upload.MaxSize = 2 * 1024 * 1024 * 1024 // 2GB 默认
+	}
+	if len(c.CORS.AllowedOrigins) == 0 {
+		log.Println("警告: CORS.AllowedOrigins 未配置，前后端分离部署可能失败")
 	}
 }
 
 // startEmailConsumer 在本地 goroutine 中启动邮件消费者。
 // 这样注册发验证码时只负责投递任务，不阻塞当前 HTTP 请求。
-func startEmailConsumer(mq *rabbitmq.RabbitMQ, queueName string) {
+func startEmailConsumer(mq *rabbitmq.RabbitMQ, queueName string, mailCfg config.MailConfig) {
+	hc := helper.MailConfig{
+		From:       mailCfg.From,
+		Host:       mailCfg.Host,
+		Username:   mailCfg.Username,
+		Password:   mailCfg.Password,
+		ServerName: mailCfg.ServerName,
+	}
 	emailHandler := func(email string, code string) error {
 		log.Printf("start sending email, email=%s", email)
-		if err := helper.MailCodeSend(email, code); err != nil {
+		if err := helper.MailCodeSend(email, code, hc); err != nil {
 			log.Printf("send email failed: %v", err)
 			return err
 		}

@@ -1,7 +1,0 @@
-panic: open core/internal/authorization/model.conf: The system cannot find the path specified.
-
-goroutine 1 [running]:
-cloud_disk/core/internal/svc.NewServiceContext({{{{0xc00000ad90, 0x8}, {{...}, {...}, {...}, {...}, {...}, {...}, 0x0, 0x0, ...}, ...}, ...}, ...})
-	D:/Go_Project/cloud_disk/core/internal/svc/service-context.go:29 +0x2f8
-main.main()
-	D:/Go_Project/cloud_disk/core/core.go:29 +0x13f

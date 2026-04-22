@@ -1,40 +1,38 @@
-// Code scaffolded by goctl. Safe to edit.
-// goctl 1.9.2
-
 package middleware
 
 import (
+	appErrors "cloud_disk/core/internal/errors"
 	"cloud_disk/core/internal/helper"
 	"net/http"
 	"strconv"
+
+	"github.com/zeromicro/go-zero/core/logx"
+	"github.com/zeromicro/go-zero/rest/httpx"
 )
 
 type AuthMiddleware struct {
+	accessSecret string
 }
 
-func NewAuthMiddleware() *AuthMiddleware {
-	return &AuthMiddleware{}
+func NewAuthMiddleware(accessSecret string) *AuthMiddleware {
+	return &AuthMiddleware{accessSecret: accessSecret}
 }
 
 func (m *AuthMiddleware) Handle(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		//1.从Header中回去用户token信息
 		token := r.Header.Get("Authorization")
-		//2.没有信息 返回未授权
 		if token == "" {
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte("Unauthorized"))
+			httpx.ErrorCtx(r.Context(), w, appErrors.Unauthorized(r.Context(), "identity or authorization is required", nil, nil))
 			return
 		}
-		//3.解析token
-		uc, err := helper.AnalyzeToken(token)
-		//4.解析失败
+
+		uc, err := helper.AnalyzeToken(token, m.accessSecret)
 		if err != nil {
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(err.Error()))
+			logx.WithContext(r.Context()).Errorf("auth token parse failed: %v", err)
+			httpx.ErrorCtx(r.Context(), w, appErrors.AuthFailed(r.Context(), "authentication failed", err, nil))
 			return
 		}
-		//4.解析成功 在Header中设置用户的Identity，Name,Id
+
 		r.Header.Set("UserId", strconv.Itoa(uc.ID))
 		r.Header.Set("UserIdentity", uc.Identity)
 		r.Header.Set("UserName", uc.Name)

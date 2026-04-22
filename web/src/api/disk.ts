@@ -1,11 +1,16 @@
 import httpClient from "@/api/http";
 import type {
+  BatchRenamePayload,
+  BatchRenameResponse,
   BatchDeletePayload,
   BatchFavoritePayload,
   BatchMovePayload,
   CreateFolderPayload,
   DeleteFilePayload,
   FavoritePayload,
+  FileVersionListResponse,
+  FileVersionRestorePayload,
+  FileVersionRestoreResponse,
   FilePreviewResponse,
   FolderChildrenResponse,
   FolderPathResponse,
@@ -72,6 +77,11 @@ export async function renameFile(payload: RenameFilePayload): Promise<void> {
   await httpClient.put("/user/file/name/update", payload);
 }
 
+export async function batchRenameFiles(payload: BatchRenamePayload): Promise<BatchRenameResponse> {
+  const { data } = await httpClient.put<BatchRenameResponse>("/user/file/batch/rename", payload);
+  return data;
+}
+
 export async function deleteFile(payload: DeleteFilePayload): Promise<void> {
   await httpClient.delete("/user/file/delete", { data: payload });
 }
@@ -83,6 +93,17 @@ export async function moveFile(payload: MoveFilePayload): Promise<void> {
 export async function previewFile(identity: string): Promise<FilePreviewResponse> {
   const encodedIdentity = encodeURIComponent(identity);
   const { data } = await httpClient.get<FilePreviewResponse>(`/user/file/preview/${encodedIdentity}`);
+  return data;
+}
+
+export async function listFileVersions(identity: string): Promise<FileVersionListResponse> {
+  const encodedIdentity = encodeURIComponent(identity);
+  const { data } = await httpClient.get<FileVersionListResponse>(`/user/file/version/list/${encodedIdentity}`);
+  return data;
+}
+
+export async function restoreFileVersion(payload: FileVersionRestorePayload): Promise<FileVersionRestoreResponse> {
+  const { data } = await httpClient.put<FileVersionRestoreResponse>("/user/file/version/restore", payload);
   return data;
 }
 

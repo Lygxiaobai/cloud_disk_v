@@ -2,6 +2,7 @@ package models
 
 import (
 	"log"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
@@ -17,12 +18,17 @@ func Init(dataSource string) *xorm.Engine {
 		return nil
 	}
 
+	engine.SetMaxIdleConns(10)
+	engine.SetMaxOpenConns(100)
+	engine.SetConnMaxLifetime(time.Hour)
+
 	if err := engine.Sync2(
 		new(UserBasic),
 		new(UserRepository),
 		new(RepositoryPool),
 		new(ShareBasic),
 		new(UploadSession),
+		new(UserFileVersion),
 	); err != nil {
 		log.Printf("xorm sync schema failed: %v", err)
 		return nil
@@ -35,8 +41,14 @@ func Init(dataSource string) *xorm.Engine {
 // 最近文件、验证码、分享缓存等能力都会依赖这个连接。
 func InitRedis(addr string, password string, db int) *redis.Client {
 	return redis.NewClient(&redis.Options{
-		Addr:     addr,
-		Password: password,
-		DB:       db,
+		Addr:         addr,
+		Password:     password,
+		DB:           db,
+		PoolSize:     20,
+		MinIdleConns: 5,
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
+		MaxRetries:   3,
 	})
 }

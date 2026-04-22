@@ -10,6 +10,8 @@ type ShareBasic struct {
 	RepositoryIdentity     string
 	ExpiredTime            int
 	ClickNum               int
+	AccessCode             string
+	AllowDownload          int
 	CreatedAt              time.Time `xorm:"created"`
 	UpdatedAt              time.Time `xorm:"updated"`
 	DeletedAt              time.Time `xorm:"deleted"`

@@ -52,7 +52,6 @@ func (l *UserFolderChildrenLogic) UserFolderChildren(req *types.UserFolderChildr
 			  AND ur.deleted_at IS NULL
 			ORDER BY ur.id ASC
 			`
-	l.svcCtx.Engine.ShowSQL(true)
 
 	err = l.svcCtx.Engine.SQL(sql, userIdentity, req.Id).Find(&list)
 	if err != nil {

@@ -1,0 +1,37 @@
+name: integration-tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Start MySQL and Redis
+        run: docker compose -f deploy/docker-compose.integration.yml up -d
+
+      - name: Wait for dependencies
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec cloud-disk-mysql-test mysqladmin ping -h 127.0.0.1 -p123456 --silent >/dev/null 2>&1 && \
+               docker exec cloud-disk-redis-test redis-cli ping | grep -q PONG; then
+              exit 0
+            fi
+            sleep 5
+          done
+          docker compose -f deploy/docker-compose.integration.yml ps
+          exit 1
+
+      - name: Run integration tests
+        env:
+          RUN_INTEGRATION_TESTS: "1"
+          MYSQL_DSN_TEST: root:123456@tcp(127.0.0.1:3307)/cloud_disk?charset=utf8mb4&parseTime=True&loc=Local
+          REDIS_ADDR_TEST: 127.0.0.1:6380
+        run: go test ./core/internal/test -count=1

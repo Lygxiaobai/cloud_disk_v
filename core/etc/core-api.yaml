@@ -2,13 +2,13 @@ Name: core-api
 Host: 0.0.0.0
 Port: 8888
 Mysql:
-  DataSource: root:123456@(127.0.0.1:3306)/cloud_disk?charset=utf8mb4&parseTime=True&loc=Local
+  DataSource: ${MYSQL_DSN}
 Redis:
-  Addr: 127.0.0.1:6379
-  Password: ""
+  Addr: ${REDIS_ADDR}
+  Password: ${REDIS_PASSWORD}
   DB: 0
 RabbitMQ:
-  URL: amqp://guest:guest@localhost:5672/
+  URL: ${RABBITMQ_URL}
   EmailQueue: email_queue
   LogExchange: log_exchange
   LocalLogQueue: local_log_queue
@@ -20,19 +20,52 @@ Elasticsearch:
   Password: ""
   IndexPrefix: logs
 Casbin:
-
   ModelPath: internal/authorization/model.conf
   PolicyPath: internal/authorization/policy.csv
 OSS:
   Region: cn-hangzhou
   Bucket: lvxiaobai
   Endpoint: oss-cn-hangzhou.aliyuncs.com
-  AccessKeyId: ""
-  AccessKeySecret: ""
+  AccessKeyId: ${OSS_ACCESS_KEY_ID}
+  AccessKeySecret: ${OSS_ACCESS_KEY_SECRET}
   RoleArn: "acs:ram::1869042830955493:role/aliyunoss"
   ExternalID: ""
   UploadBaseDir: cloud-disk
   StsDurationSeconds: 3600
   PreviewExpireSeconds: 1800
-
-  
+JWT:
+  AccessSecret: ${JWT_ACCESS_SECRET}
+  RefreshSecret: ${JWT_REFRESH_SECRET}
+  AccessExpire: 3600
+  RefreshExpire: 7200
+Mail:
+  From: ${MAIL_FROM}
+  Host: smtp.163.com:465
+  Username: ${MAIL_USERNAME}
+  Password: ${MAIL_PASSWORD}
+  ServerName: smtp.163.com
+  CodeExpire: 300
+  CodeLen: 6
+CORS:
+  AllowedOrigins:
+    - http://127.0.0.1:5173
+    - http://localhost:5173
+Upload:
+  MaxSize: 2147483648
+  BlockedExtensions:
+    - .exe
+    - .bat
+    - .cmd
+    - .com
+    - .msi
+    - .ps1
+    - .vbs
+    - .sh
+    - .scr
+RateLimit:
+  LoginPerMinute: 10
+  RegisterPerHour: 20
+  MailCodePerEmailMinute: 1
+  MailCodePerEmailHour: 5
+  LoginLockThreshold: 5
+  LoginLockMinutes: 15

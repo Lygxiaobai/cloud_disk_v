@@ -5,6 +5,7 @@ import (
 	"cloud_disk/core/internal/helper"
 	"cloud_disk/core/internal/models"
 	"context"
+	"io"
 
 	"cloud_disk/core/internal/svc"
 	"cloud_disk/core/internal/types"
@@ -26,7 +27,7 @@ func NewFileUploadMultipartLogic(ctx context.Context, svcCtx *svc.ServiceContext
 	}
 }
 
-func (l *FileUploadMultipartLogic) FileUploadMultipart(req *types.FileUploadMultipartRequest, fileBuf []byte) (resp *types.FileUploadMultipartResponse, err error) {
+func (l *FileUploadMultipartLogic) FileUploadMultipart(req *types.FileUploadMultipartRequest, reader io.Reader) (resp *types.FileUploadMultipartResponse, err error) {
 	sess := l.svcCtx.Engine.NewSession()
 	defer sess.Close()
 	if err := sess.Begin(); err != nil {
@@ -43,7 +44,7 @@ func (l *FileUploadMultipartLogic) FileUploadMultipart(req *types.FileUploadMult
 	}()
 
 	rp := models.RepositoryPool{}
-	has, err := sess.SQL("SELECT * FROM repository_pool WHERE hash = ? LIMIT 1 FOR UPDATE", req.Hash).Get(&rp)
+	has, err := sess.SQL("SELECT * FROM repository_pool WHERE hash = ? AND size = ? LIMIT 1 FOR UPDATE", req.Hash, req.Size).Get(&rp)
 	if err != nil {
 		return nil, errors.New(l.ctx, "查询文件哈希失败", err, map[string]interface{}{
 			"hash": req.Hash,
@@ -59,7 +60,7 @@ func (l *FileUploadMultipartLogic) FileUploadMultipart(req *types.FileUploadMult
 		return resp, nil
 	}
 
-	filePath, err := helper.FileUploadMultipart(req.Name, fileBuf)
+	filePath, err := helper.FileUploadMultipart(req.Name, reader)
 	if err != nil {
 		return nil, errors.New(l.ctx, "分片上传失败", err, map[string]interface{}{
 			"file_name": req.Name,

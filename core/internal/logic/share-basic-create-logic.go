@@ -9,6 +9,7 @@ import (
 	"cloud_disk/core/internal/helper"
 	"cloud_disk/core/internal/models"
 	"context"
+	"strings"
 
 	"cloud_disk/core/internal/svc"
 	"cloud_disk/core/internal/types"
@@ -31,9 +32,9 @@ func NewShareBasicCreateLogic(ctx context.Context, svcCtx *svc.ServiceContext) *
 }
 
 func (l *ShareBasicCreateLogic) ShareBasicCreate(req *types.ShareBasicCreateRequest, userIdentity string) (resp *types.ShareBasicCreateResponse, err error) {
-	//根据用户传过来的Identity查找到该记录
+	// 根据用户传过来的 Identity 查找到该记录。
 	upData := &models.UserRepository{}
-	has, err := l.svcCtx.Engine.Where("identity = ? AND user_identity = ?", req.UserRepositoryIdentity, userIdentity).Get(upData)
+	has, err := l.svcCtx.Engine.Where("identity = ? AND user_identity = ? AND deleted_at IS NULL", req.UserRepositoryIdentity, userIdentity).Get(upData)
 	if err != nil {
 		return nil, errors.New(l.ctx, "查询文件失败", err, map[string]interface{}{
 			"repository_identity": req.UserRepositoryIdentity,
@@ -47,7 +48,20 @@ func (l *ShareBasicCreateLogic) ShareBasicCreate(req *types.ShareBasicCreateRequ
 		})
 	}
 
-	//向share_basic表中插入数据
+	// 这里把分享高级配置一并落库：
+	// - access_code: 公共链接访问口令
+	// - allow_download: 是否允许二次保存 / 下载式使用
+	accessCode := strings.ToUpper(strings.TrimSpace(req.AccessCode))
+	allowDownload := 1
+	if req.AllowDownload != nil {
+		if *req.AllowDownload == 0 {
+			allowDownload = 0
+		} else {
+			allowDownload = 1
+		}
+	}
+
+	// 向 share_basic 表中插入数据。
 	var sb = models.ShareBasic{
 		Identity:               helper.UUID(),
 		UserIdentity:           userIdentity,
@@ -55,16 +69,20 @@ func (l *ShareBasicCreateLogic) ShareBasicCreate(req *types.ShareBasicCreateRequ
 		RepositoryIdentity:     upData.RepositoryIdentity,
 		ExpiredTime:            req.ExpiredTime,
 		ClickNum:               define.DefaultClickNum,
+		AccessCode:             accessCode,
+		AllowDownload:          allowDownload,
 	}
 	_, err = l.svcCtx.Engine.Insert(&sb)
 	if err != nil {
 		return nil, errors.New(l.ctx, "插入分享记录失败", err, map[string]interface{}{
 			"repository_identity": req.UserRepositoryIdentity,
 			"expired_time":        req.ExpiredTime,
+			"allow_download":      allowDownload,
 		})
 	}
 	resp = &types.ShareBasicCreateResponse{
-		Identity: sb.Identity,
+		Identity:      sb.Identity,
+		AccessCodeSet: accessCode != "",
 	}
 	return
 }

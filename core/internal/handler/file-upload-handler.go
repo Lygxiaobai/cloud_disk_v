@@ -1,13 +1,8 @@
-// Code scaffolded by goctl. Safe to edit.
-// goctl 1.9.2
-
 package handler
 
 import (
 	"cloud_disk/core/internal/helper"
 	"cloud_disk/core/internal/models"
-	"crypto/md5"
-	"fmt"
 	"net/http"
 	"path"
 
@@ -19,6 +14,10 @@ import (
 
 func FileUploadHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if maxSize := svcCtx.Config.Upload.MaxSize; maxSize > 0 {
+			r.Body = http.MaxBytesReader(w, r.Body, maxSize)
+		}
+
 		var req types.FileUploadRequest
 		if err := httpx.Parse(r, &req); err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
@@ -27,22 +26,29 @@ func FileUploadHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 
 		file, fileHeader, err := r.FormFile("file")
 		if err != nil {
+			httpx.ErrorCtx(r.Context(), w, err)
 			return
 		}
-		b := make([]byte, fileHeader.Size)
-		// Read可能会有bug
-		if _, err := file.Read(b); err != nil {
+		defer file.Close()
+
+		ext := path.Ext(fileHeader.Filename)
+		if err := helper.ValidateUploadExt(ext, svcCtx.Config.Upload.BlockedExtensions); err != nil {
+			httpx.ErrorCtx(r.Context(), w, err)
 			return
 		}
-		//计算文件的hash值
-		fH := fmt.Sprintf("%x", md5.Sum(b))
-		//1.判断文件是否已经上传到oss
-		rp := new(models.RepositoryPool)
-		has, err := svcCtx.Engine.Where("hash=?", fH).Get(rp)
+
+		fileHash, err := helper.HashAndReset(file, svcCtx.Config.Upload.MaxSize)
 		if err != nil {
+			httpx.ErrorCtx(r.Context(), w, err)
 			return
 		}
-		//2.1若有则直接返回
+
+		rp := new(models.RepositoryPool)
+		has, err := svcCtx.Engine.Where("hash = ? AND size = ?", fileHash, fileHeader.Size).Get(rp)
+		if err != nil {
+			httpx.ErrorCtx(r.Context(), w, err)
+			return
+		}
 		if has {
 			httpx.OkJson(w, &types.FileUploadResponse{
 				Identity: rp.Identity,
@@ -51,14 +57,18 @@ func FileUploadHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			})
 			return
 		}
-		//2.1.2若无则上传 在req设置值传给logic使用
-		fileOSSPath, err := helper.FileUpload(r)
+
+		fileOSSPath, err := helper.FileUpload(fileHeader.Filename, file)
+		if err != nil {
+			httpx.ErrorCtx(r.Context(), w, err)
+			return
+		}
 
 		req.Name = fileHeader.Filename
-		req.Ext = path.Ext(fileHeader.Filename)
+		req.Ext = ext
 		req.Size = fileHeader.Size
 		req.Path = fileOSSPath
-		req.Hash = fH
+		req.Hash = fileHash
 
 		l := logic.NewFileUploadLogic(r.Context(), svcCtx)
 		resp, err := l.FileUpload(&req)

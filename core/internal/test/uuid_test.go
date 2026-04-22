@@ -1,11 +1,17 @@
 package test
 
 import (
-	"fmt"
-	uuid "github.com/satori/go.uuid"
 	"testing"
+
+	"cloud_disk/core/internal/helper"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUUID(t *testing.T) {
-	fmt.Println(uuid.NewV4().String())
+	first := helper.UUID()
+	second := helper.UUID()
+
+	require.NotEmpty(t, first)
+	require.NotEmpty(t, second)
+	require.NotEqual(t, first, second)
 }
