@@ -35,58 +35,143 @@ ensure_line_in_file() {
   grep -Fqx "$line" "$file" 2>/dev/null || printf '%s\n' "$line" >>"$file"
 }
 
-CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-APP_DIR="${APP_DIR:-$CURRENT_DIR}"
-APP_USER="${APP_USER:-${SUDO_USER:-root}}"
-APP_GROUP="${APP_GROUP:-$APP_USER}"
-DOMAIN="${DOMAIN:-_}"
-BACKEND_PORT="${BACKEND_PORT:-8888}"
-MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-}"
-MYSQL_DB="${MYSQL_DB:-cloud_disk}"
-MYSQL_USER="${MYSQL_USER:-cloud_disk}"
-MYSQL_PASSWORD="${MYSQL_PASSWORD:-cloud_disk_ChangeMe_123456}"
-REDIS_ADDR="${REDIS_ADDR:-127.0.0.1:6379}"
-REDIS_PASSWORD="${REDIS_PASSWORD:-}"
-SERVER_PUBLIC_HOST="${SERVER_PUBLIC_HOST:-$DOMAIN}"
-INSTALL_RABBITMQ="${INSTALL_RABBITMQ:-0}"
-ENABLE_UFW="${ENABLE_UFW:-1}"
-ENABLE_HTTPS="${ENABLE_HTTPS:-0}"
-MAIL_FROM="${MAIL_FROM:-}"
-MAIL_USERNAME="${MAIL_USERNAME:-}"
-MAIL_PASSWORD="${MAIL_PASSWORD:-}"
-OSS_ACCESS_KEY_ID="${OSS_ACCESS_KEY_ID:-}"
-OSS_ACCESS_KEY_SECRET="${OSS_ACCESS_KEY_SECRET:-}"
-RABBITMQ_URL="${RABBITMQ_URL:-amqp://guest:guest@127.0.0.1:5672/}"
-JWT_ACCESS_SECRET="${JWT_ACCESS_SECRET:-$(random_hex)}"
-JWT_REFRESH_SECRET="${JWT_REFRESH_SECRET:-$(random_hex)}"
-GO_VERSION="${GO_VERSION:-1.24.2}"
-NODE_MAJOR="${NODE_MAJOR:-20}"
-SYSTEMD_SERVICE_NAME="${SYSTEMD_SERVICE_NAME:-cloud-disk-backend}"
-ENV_FILE="${ENV_FILE:-$APP_DIR/.env}"
-NGINX_SITE_PATH="${NGINX_SITE_PATH:-/etc/nginx/sites-available/cloud-disk}"
-NGINX_SITE_LINK="${NGINX_SITE_LINK:-/etc/nginx/sites-enabled/cloud-disk}"
-SYSTEMD_SERVICE_PATH="${SYSTEMD_SERVICE_PATH:-/etc/systemd/system/${SYSTEMD_SERVICE_NAME}.service}"
+detect_go_version_from_mod() {
+  local mod_file="$1"
+  awk '$1 == "go" { print $2; exit }' "$mod_file"
+}
 
-require_root
+any_non_empty() {
+  local value
+  for value in "$@"; do
+    if [[ -n "$value" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
 
-[[ -d "$APP_DIR" ]] || fatal "APP_DIR does not exist: $APP_DIR"
-[[ -f "$APP_DIR/go.mod" ]] || fatal "APP_DIR does not look like the repo root: $APP_DIR"
-[[ -f "$APP_DIR/core/etc/core-api.yaml" ]] || fatal "Missing backend config file under APP_DIR."
-[[ -f "$APP_DIR/web/package.json" ]] || fatal "Missing frontend package.json under APP_DIR."
+escape_env_value() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '"%s"' "$value"
+}
 
-if [[ "$JWT_ACCESS_SECRET" == "$JWT_REFRESH_SECRET" ]]; then
-  fatal "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different."
-fi
+write_env_var() {
+  local key="$1"
+  local value="$2"
+  printf '%s=%s\n' "$key" "$(escape_env_value "$value")" >>"$ENV_FILE"
+}
 
-if ! id "$APP_USER" >/dev/null 2>&1; then
-  fatal "APP_USER does not exist: $APP_USER"
-fi
+run_as_app_user() {
+  local command="$1"
+
+  if [[ "$APP_USER" == "root" ]]; then
+    env PATH="/usr/local/go/bin:${PATH}" bash -lc "$command"
+    return
+  fi
+
+  if command_exists sudo; then
+    sudo -u "$APP_USER" env PATH="/usr/local/go/bin:${PATH}" bash -lc "$command"
+    return
+  fi
+
+  if command_exists runuser; then
+    runuser -u "$APP_USER" -- env PATH="/usr/local/go/bin:${PATH}" bash -lc "$command"
+    return
+  fi
+
+  fatal "Need either sudo or runuser to switch to APP_USER=${APP_USER}."
+}
+
+wait_for_systemd_service() {
+  local service_name="$1"
+  local retries="${2:-30}"
+  local delay_seconds="${3:-2}"
+  local attempt
+
+  for ((attempt = 1; attempt <= retries; attempt++)); do
+    if systemctl is-active --quiet "$service_name"; then
+      log "Service is active: $service_name"
+      return
+    fi
+    sleep "$delay_seconds"
+  done
+
+  journalctl -u "$service_name" -n 50 --no-pager || true
+  fatal "Service failed to become active: $service_name"
+}
+
+wait_for_http_response() {
+  local url="$1"
+  local label="$2"
+  local retries="${3:-30}"
+  local delay_seconds="${4:-2}"
+  local acceptable_pattern="${5:-^(200|301|302|304|400|401|403|404|405|409|422)$}"
+  local status=""
+  local attempt
+
+  for ((attempt = 1; attempt <= retries; attempt++)); do
+    status="$(curl -k -sS -o /dev/null -w '%{http_code}' "$url" || true)"
+    if [[ "$status" =~ $acceptable_pattern ]]; then
+      log "HTTP check passed for ${label}: ${status} ${url}"
+      return
+    fi
+    sleep "$delay_seconds"
+  done
+
+  fatal "HTTP check failed for ${label}: ${url} (last status: ${status:-none})"
+}
+
+validate_required_paths() {
+  [[ -d "$APP_DIR" ]] || fatal "APP_DIR does not exist: $APP_DIR"
+  [[ -f "$APP_DIR/go.mod" ]] || fatal "APP_DIR does not look like the repo root: $APP_DIR"
+  [[ -f "$APP_DIR/core/etc/core-api.yaml" ]] || fatal "Missing backend config file under APP_DIR."
+  [[ -f "$APP_DIR/web/package.json" ]] || fatal "Missing frontend package.json under APP_DIR."
+}
+
+validate_users_and_groups() {
+  if ! id "$APP_USER" >/dev/null 2>&1; then
+    fatal "APP_USER does not exist: $APP_USER"
+  fi
+
+  if ! getent group "$APP_GROUP" >/dev/null 2>&1; then
+    fatal "APP_GROUP does not exist: $APP_GROUP"
+  fi
+}
+
+validate_optional_config() {
+  if [[ "$JWT_ACCESS_SECRET" == "$JWT_REFRESH_SECRET" ]]; then
+    fatal "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different."
+  fi
+
+  if any_non_empty "$MAIL_FROM" "$MAIL_USERNAME" "$MAIL_PASSWORD" "$MAIL_HOST" "$MAIL_SERVER_NAME"; then
+    [[ -n "$MAIL_FROM" ]] || fatal "MAIL_FROM is required when SMTP is enabled."
+    [[ -n "$MAIL_USERNAME" ]] || fatal "MAIL_USERNAME is required when SMTP is enabled."
+    [[ -n "$MAIL_PASSWORD" ]] || fatal "MAIL_PASSWORD is required when SMTP is enabled."
+    [[ -n "$MAIL_HOST" ]] || fatal "MAIL_HOST is required when SMTP is enabled."
+    [[ -n "$MAIL_SERVER_NAME" ]] || fatal "MAIL_SERVER_NAME is required when SMTP is enabled."
+  else
+    warn "SMTP is not configured. Registration email verification will not work."
+  fi
+
+  if any_non_empty "$OSS_ACCESS_KEY_ID" "$OSS_ACCESS_KEY_SECRET" "$OSS_BUCKET" "$OSS_REGION" "$OSS_ENDPOINT" "$OSS_ROLE_ARN" "$OSS_EXTERNAL_ID"; then
+    [[ -n "$OSS_ACCESS_KEY_ID" ]] || fatal "OSS_ACCESS_KEY_ID is required when OSS is enabled."
+    [[ -n "$OSS_ACCESS_KEY_SECRET" ]] || fatal "OSS_ACCESS_KEY_SECRET is required when OSS is enabled."
+    [[ -n "$OSS_BUCKET" ]] || fatal "OSS_BUCKET is required when OSS is enabled."
+    [[ -n "$OSS_REGION" ]] || fatal "OSS_REGION is required when OSS is enabled."
+    [[ -n "$OSS_ENDPOINT" ]] || fatal "OSS_ENDPOINT is required when OSS is enabled."
+    [[ -n "$OSS_ROLE_ARN" ]] || fatal "OSS_ROLE_ARN is required when OSS is enabled."
+  else
+    warn "OSS is not fully configured. Upload and preview features will not work."
+  fi
+}
 
 install_base_packages() {
   log "Installing base packages"
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y ca-certificates curl wget gnupg lsb-release software-properties-common unzip git nginx redis-server mysql-server
+  apt-get install -y ca-certificates curl wget gnupg lsb-release software-properties-common unzip git nginx redis-server mysql-server openssl
 }
 
 install_go() {
@@ -132,6 +217,7 @@ install_optional_packages() {
     apt-get install -y rabbitmq-server
     systemctl enable rabbitmq-server
     systemctl restart rabbitmq-server
+    wait_for_systemd_service rabbitmq-server
   else
     warn "Skipping RabbitMQ installation. Async email/log pipeline will be degraded."
   fi
@@ -151,8 +237,12 @@ setup_services() {
   log "Enabling MySQL, Redis and Nginx"
   systemctl enable mysql
   systemctl restart mysql
+  wait_for_systemd_service mysql
+
   systemctl enable redis-server
   systemctl restart redis-server
+  wait_for_systemd_service redis-server
+
   systemctl enable nginx
 }
 
@@ -193,28 +283,44 @@ SQL
     mysql <"$sql_file"
   fi
   rm -f "$sql_file"
+
+  mysql --protocol=TCP -h"${MYSQL_HOST}" -P"${MYSQL_PORT}" -u"${MYSQL_USER}" "-p${MYSQL_PASSWORD}" -e "USE \`${MYSQL_DB}\`; SELECT 1;" >/dev/null
+  log "MySQL application connection verified"
 }
 
 write_env_file() {
   log "Writing environment file to $ENV_FILE"
-  cat >"$ENV_FILE" <<EOF
-JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
-JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+  : >"$ENV_FILE"
 
-MYSQL_DSN=${MYSQL_USER}:${MYSQL_PASSWORD}@tcp(127.0.0.1:3306)/${MYSQL_DB}?charset=utf8mb4&parseTime=True&loc=Local
+  write_env_var JWT_ACCESS_SECRET "$JWT_ACCESS_SECRET"
+  write_env_var JWT_REFRESH_SECRET "$JWT_REFRESH_SECRET"
+  printf '\n' >>"$ENV_FILE"
 
-REDIS_ADDR=${REDIS_ADDR}
-REDIS_PASSWORD=${REDIS_PASSWORD}
+  write_env_var MYSQL_DSN "${MYSQL_USER}:${MYSQL_PASSWORD}@tcp(${MYSQL_HOST}:${MYSQL_PORT})/${MYSQL_DB}?charset=utf8mb4&parseTime=True&loc=Local"
+  printf '\n' >>"$ENV_FILE"
 
-RABBITMQ_URL=${RABBITMQ_URL}
+  write_env_var REDIS_ADDR "$REDIS_ADDR"
+  write_env_var REDIS_PASSWORD "$REDIS_PASSWORD"
+  printf '\n' >>"$ENV_FILE"
 
-MAIL_FROM=${MAIL_FROM}
-MAIL_USERNAME=${MAIL_USERNAME}
-MAIL_PASSWORD=${MAIL_PASSWORD}
+  write_env_var RABBITMQ_URL "$RABBITMQ_URL"
+  printf '\n' >>"$ENV_FILE"
 
-OSS_ACCESS_KEY_ID=${OSS_ACCESS_KEY_ID}
-OSS_ACCESS_KEY_SECRET=${OSS_ACCESS_KEY_SECRET}
-EOF
+  write_env_var MAIL_FROM "$MAIL_FROM"
+  write_env_var MAIL_HOST "$MAIL_HOST"
+  write_env_var MAIL_SERVER_NAME "$MAIL_SERVER_NAME"
+  write_env_var MAIL_USERNAME "$MAIL_USERNAME"
+  write_env_var MAIL_PASSWORD "$MAIL_PASSWORD"
+  printf '\n' >>"$ENV_FILE"
+
+  write_env_var OSS_REGION "$OSS_REGION"
+  write_env_var OSS_BUCKET "$OSS_BUCKET"
+  write_env_var OSS_ENDPOINT "$OSS_ENDPOINT"
+  write_env_var OSS_ROLE_ARN "$OSS_ROLE_ARN"
+  write_env_var OSS_EXTERNAL_ID "$OSS_EXTERNAL_ID"
+  write_env_var OSS_ACCESS_KEY_ID "$OSS_ACCESS_KEY_ID"
+  write_env_var OSS_ACCESS_KEY_SECRET "$OSS_ACCESS_KEY_SECRET"
+
   chmod 600 "$ENV_FILE"
   chown "$APP_USER:$APP_GROUP" "$ENV_FILE"
 }
@@ -224,7 +330,7 @@ build_backend() {
   mkdir -p "$APP_DIR/bin" "$APP_DIR/logs"
   chown -R "$APP_USER:$APP_GROUP" "$APP_DIR/bin" "$APP_DIR/logs"
 
-  sudo -u "$APP_USER" env PATH="/usr/local/go/bin:${PATH}" bash -lc "
+  run_as_app_user "
     set -euo pipefail
     cd '$APP_DIR'
     /usr/local/go/bin/go build -o '$APP_DIR/bin/cloud-disk' ./core
@@ -233,10 +339,14 @@ build_backend() {
 
 build_frontend() {
   log "Installing frontend dependencies and building"
-  sudo -u "$APP_USER" bash -lc "
+  run_as_app_user "
     set -euo pipefail
     cd '$APP_DIR/web'
-    npm install
+    if [[ -f package-lock.json ]]; then
+      npm ci
+    else
+      npm install
+    fi
     npm run build
   "
 }
@@ -276,6 +386,7 @@ EOF
   rm -f /etc/nginx/sites-enabled/default
   nginx -t
   systemctl restart nginx
+  wait_for_systemd_service nginx
 }
 
 write_systemd_service() {
@@ -303,6 +414,20 @@ EOF
   systemctl daemon-reload
   systemctl enable "$SYSTEMD_SERVICE_NAME"
   systemctl restart "$SYSTEMD_SERVICE_NAME"
+  wait_for_systemd_service "$SYSTEMD_SERVICE_NAME"
+}
+
+verify_runtime() {
+  log "Verifying Redis connectivity"
+  if [[ -n "$REDIS_PASSWORD" ]]; then
+    redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" ping | grep -qx "PONG"
+  else
+    redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping | grep -qx "PONG"
+  fi
+
+  wait_for_http_response "http://127.0.0.1:${BACKEND_PORT}/user/detail" "backend" 30 2 '^(200|400|401|403|404|405|409|422)$'
+  wait_for_http_response "http://127.0.0.1/" "frontend via nginx" 30 2 '^(200|301|302|304)$'
+  wait_for_http_response "http://127.0.0.1/api/user/detail" "api via nginx" 30 2 '^(200|400|401|403|404|405|409|422)$'
 }
 
 setup_https() {
@@ -331,21 +456,87 @@ Nginx site:         ${NGINX_SITE_PATH}
 Env file:           ${ENV_FILE}
 Server name:        ${DOMAIN}
 External URL:       http://${SERVER_PUBLIC_HOST}
+Go version:         ${GO_VERSION}
+
+Checks passed:
+  - mysql application login
+  - redis ping
+  - backend http response
+  - nginx static page
+  - nginx api proxy
 
 Check commands:
   systemctl status ${SYSTEMD_SERVICE_NAME}
   journalctl -u ${SYSTEMD_SERVICE_NAME} -f
   systemctl status nginx
   curl http://127.0.0.1:${BACKEND_PORT}/user/detail
+  curl http://127.0.0.1/api/user/detail
 
 Important:
   1. Ensure your cloud security group allows TCP 80/443.
-  2. Upload and preview require valid OSS credentials.
-  3. Registration email requires valid SMTP credentials.
+  2. Upload and preview require valid OSS credentials plus bucket/region/role settings.
+  3. Registration email requires a complete SMTP configuration.
 EOF
 }
 
+CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+APP_DIR="${APP_DIR:-$CURRENT_DIR}"
+APP_USER="${APP_USER:-${SUDO_USER:-root}}"
+APP_GROUP="${APP_GROUP:-$APP_USER}"
+DOMAIN="${DOMAIN:-_}"
+BACKEND_PORT="${BACKEND_PORT:-8888}"
+MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-}"
+MYSQL_DB="${MYSQL_DB:-cloud_disk}"
+MYSQL_USER="${MYSQL_USER:-cloud_disk}"
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-cloud_disk_ChangeMe_123456}"
+MYSQL_HOST="${MYSQL_HOST:-127.0.0.1}"
+MYSQL_PORT="${MYSQL_PORT:-3306}"
+REDIS_ADDR="${REDIS_ADDR:-127.0.0.1:6379}"
+REDIS_HOST="${REDIS_ADDR%%:*}"
+REDIS_PORT="${REDIS_ADDR##*:}"
+REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+SERVER_PUBLIC_HOST="${SERVER_PUBLIC_HOST:-$DOMAIN}"
+INSTALL_RABBITMQ="${INSTALL_RABBITMQ:-0}"
+ENABLE_UFW="${ENABLE_UFW:-1}"
+ENABLE_HTTPS="${ENABLE_HTTPS:-0}"
+MAIL_FROM="${MAIL_FROM:-}"
+MAIL_HOST="${MAIL_HOST:-}"
+MAIL_SERVER_NAME="${MAIL_SERVER_NAME:-}"
+MAIL_USERNAME="${MAIL_USERNAME:-}"
+MAIL_PASSWORD="${MAIL_PASSWORD:-}"
+OSS_REGION="${OSS_REGION:-}"
+OSS_BUCKET="${OSS_BUCKET:-}"
+OSS_ENDPOINT="${OSS_ENDPOINT:-}"
+OSS_ROLE_ARN="${OSS_ROLE_ARN:-}"
+OSS_EXTERNAL_ID="${OSS_EXTERNAL_ID:-}"
+OSS_ACCESS_KEY_ID="${OSS_ACCESS_KEY_ID:-}"
+OSS_ACCESS_KEY_SECRET="${OSS_ACCESS_KEY_SECRET:-}"
+RABBITMQ_URL="${RABBITMQ_URL:-amqp://guest:guest@127.0.0.1:5672/}"
+JWT_ACCESS_SECRET="${JWT_ACCESS_SECRET:-$(random_hex)}"
+JWT_REFRESH_SECRET="${JWT_REFRESH_SECRET:-$(random_hex)}"
+GO_VERSION="${GO_VERSION:-}"
+NODE_MAJOR="${NODE_MAJOR:-20}"
+SYSTEMD_SERVICE_NAME="${SYSTEMD_SERVICE_NAME:-cloud-disk-backend}"
+ENV_FILE="${ENV_FILE:-$APP_DIR/.env}"
+NGINX_SITE_PATH="${NGINX_SITE_PATH:-/etc/nginx/sites-available/cloud-disk}"
+NGINX_SITE_LINK="${NGINX_SITE_LINK:-/etc/nginx/sites-enabled/cloud-disk}"
+SYSTEMD_SERVICE_PATH="${SYSTEMD_SERVICE_PATH:-/etc/systemd/system/${SYSTEMD_SERVICE_NAME}.service}"
+
 main() {
+  require_root
+  validate_required_paths
+
+  if [[ -z "$GO_VERSION" ]]; then
+    GO_VERSION="$(detect_go_version_from_mod "$APP_DIR/go.mod")"
+  fi
+  [[ -n "$GO_VERSION" ]] || fatal "Failed to detect Go version from go.mod. Set GO_VERSION manually."
+
+  if [[ "$SERVER_PUBLIC_HOST" == "_" || -z "$SERVER_PUBLIC_HOST" ]]; then
+    SERVER_PUBLIC_HOST="127.0.0.1"
+  fi
+
+  validate_users_and_groups
+  validate_optional_config
   install_base_packages
   install_go
   install_node
@@ -359,6 +550,7 @@ main() {
   build_frontend
   write_nginx_site
   write_systemd_service
+  verify_runtime
   setup_https
   print_summary
 }

@@ -1,22 +1,19 @@
-# Ubuntu 一键部署脚本
+# Ubuntu One-Click Deploy
 
-脚本文件：
-
+Script:
 - `deploy/scripts/ubuntu-oneclick-deploy.sh`
 
-用途：
+What it does:
+- installs Ubuntu runtime dependencies
+- installs the Go version declared in `go.mod` by default
+- installs Node.js
+- configures MySQL, Redis, Nginx, and optional RabbitMQ
+- writes `.env`
+- builds backend and frontend
+- writes systemd and Nginx config
+- verifies MySQL, Redis, backend HTTP, frontend HTTP, and Nginx API proxy
 
-- 安装 Ubuntu 运行依赖
-- 初始化 MySQL / Redis / Nginx
-- 编译 Go 后端
-- 构建 Vue 前端
-- 生成 `.env`
-- 写入 Nginx 配置
-- 写入 systemd 服务
-
-## 用法
-
-先把仓库上传到 Ubuntu 服务器，例如：
+## Quick Start
 
 ```bash
 cd /opt
@@ -25,52 +22,72 @@ cd /opt/my_cloud_disk
 chmod +x deploy/scripts/ubuntu-oneclick-deploy.sh
 ```
 
-最小可执行示例：
+Minimal deployment without mail and without upload:
+
+```bash
+sudo APP_DIR=/opt/my_cloud_disk \
+APP_USER=$USER \
+MYSQL_PASSWORD='ReplaceWithStrongPassword' \
+bash deploy/scripts/ubuntu-oneclick-deploy.sh
+```
+
+Full deployment with SMTP and OSS:
 
 ```bash
 sudo DOMAIN=your-domain.com \
+SERVER_PUBLIC_HOST=your-domain.com \
 APP_DIR=/opt/my_cloud_disk \
 APP_USER=$USER \
-MYSQL_PASSWORD='YourStrongMysqlPassword' \
+MYSQL_PASSWORD='ReplaceWithStrongPassword' \
+MAIL_FROM='noreply@example.com' \
+MAIL_HOST='smtp.example.com:465' \
+MAIL_SERVER_NAME='smtp.example.com' \
+MAIL_USERNAME='noreply@example.com' \
+MAIL_PASSWORD='ReplaceWithSmtpAppPassword' \
+OSS_REGION='cn-hangzhou' \
+OSS_BUCKET='your-bucket' \
+OSS_ENDPOINT='oss-cn-hangzhou.aliyuncs.com' \
+OSS_ROLE_ARN='acs:ram::<account-id>:role/<role-name>' \
 OSS_ACCESS_KEY_ID='your-ak' \
 OSS_ACCESS_KEY_SECRET='your-sk' \
 bash deploy/scripts/ubuntu-oneclick-deploy.sh
 ```
 
-如果你先不配域名，也可以先用公网 IP：
+## Important Variables
 
-```bash
-sudo DOMAIN=你的公网IP \
-SERVER_PUBLIC_HOST=你的公网IP \
-APP_DIR=/opt/my_cloud_disk \
-APP_USER=$USER \
-MYSQL_PASSWORD='YourStrongMysqlPassword' \
-OSS_ACCESS_KEY_ID='your-ak' \
-OSS_ACCESS_KEY_SECRET='your-sk' \
-bash deploy/scripts/ubuntu-oneclick-deploy.sh
-```
+- `APP_DIR`: repo root on the VM
+- `APP_USER`: Linux user that builds and runs the app
+- `APP_GROUP`: Linux group for the app user
+- `DOMAIN`: Nginx `server_name`
+- `SERVER_PUBLIC_HOST`: printed external host, useful when `DOMAIN` is `_`
+- `MYSQL_HOST`: MySQL host, default `127.0.0.1`
+- `MYSQL_PORT`: MySQL port, default `3306`
+- `MYSQL_DB`: MySQL database name, default `cloud_disk`
+- `MYSQL_USER`: MySQL application user, default `cloud_disk`
+- `MYSQL_PASSWORD`: MySQL application password
+- `MYSQL_ROOT_PASSWORD`: required only if root login needs a password
+- `REDIS_ADDR`: Redis address, default `127.0.0.1:6379`
+- `REDIS_PASSWORD`: Redis password
+- `MAIL_FROM`: sender email
+- `MAIL_HOST`: SMTP host and port, for example `smtp.example.com:465`
+- `MAIL_SERVER_NAME`: SMTP TLS server name, for example `smtp.example.com`
+- `MAIL_USERNAME`: SMTP account
+- `MAIL_PASSWORD`: SMTP app password or auth token
+- `OSS_REGION`: OSS region, for example `cn-hangzhou`
+- `OSS_BUCKET`: OSS bucket name
+- `OSS_ENDPOINT`: OSS endpoint, for example `oss-cn-hangzhou.aliyuncs.com`
+- `OSS_ROLE_ARN`: RAM role ARN used for STS
+- `OSS_EXTERNAL_ID`: optional external ID for the RAM role
+- `OSS_ACCESS_KEY_ID`: OSS access key ID
+- `OSS_ACCESS_KEY_SECRET`: OSS access key secret
+- `INSTALL_RABBITMQ=1`: install and start RabbitMQ
+- `ENABLE_HTTPS=1`: install certbot and request certificates after Nginx is ready
+- `ENABLE_UFW=0`: skip automatic UFW changes
+- `GO_VERSION`: optional manual override; default is read from `go.mod`
 
-## 常用参数
+## Notes
 
-- `APP_DIR`：项目目录，默认脚本自动推导当前仓库根目录
-- `APP_USER`：运行应用的 Linux 用户，默认取 `SUDO_USER`
-- `DOMAIN`：Nginx `server_name`
-- `SERVER_PUBLIC_HOST`：对外访问地址，默认跟 `DOMAIN` 一致
-- `MYSQL_DB`：默认 `cloud_disk`
-- `MYSQL_USER`：默认 `cloud_disk`
-- `MYSQL_PASSWORD`：应用数据库密码
-- `MYSQL_ROOT_PASSWORD`：如果你的 MySQL root 需要密码登录，就传这个
-- `OSS_ACCESS_KEY_ID`：阿里云 OSS AK
-- `OSS_ACCESS_KEY_SECRET`：阿里云 OSS SK
-- `MAIL_FROM`：SMTP 发件人
-- `MAIL_USERNAME`：SMTP 用户名
-- `MAIL_PASSWORD`：SMTP 授权码
-- `INSTALL_RABBITMQ=1`：需要 RabbitMQ 时开启
-- `ENABLE_HTTPS=1`：需要 certbot 自动申请 HTTPS 时开启
-- `ENABLE_UFW=0`：不想让脚本动防火墙时关闭
-
-## 注意
-
-- 脚本会把整个项目目录 `chown` 给 `APP_USER`
-- 上传和预览依赖 OSS；不配置 OSS，主站能起来，但文件相关能力不可用
-- `ENABLE_HTTPS=1` 前，必须保证域名已解析到服务器公网 IP，并且 `80` 端口已开放
+- SMTP is optional. If it is not configured, registration email verification will fail but the site can still run.
+- OSS is optional. If it is not configured, upload and preview will fail but the site can still run.
+- The script changes ownership of the entire repo directory to `APP_USER:APP_GROUP`.
+- Before `ENABLE_HTTPS=1`, make sure the domain already resolves to the VM public IP and TCP `80` is open.

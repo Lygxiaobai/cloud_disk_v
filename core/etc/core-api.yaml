@@ -23,13 +23,13 @@ Casbin:
   ModelPath: internal/authorization/model.conf
   PolicyPath: internal/authorization/policy.csv
 OSS:
-  Region: cn-hangzhou
-  Bucket: lvxiaobai
-  Endpoint: oss-cn-hangzhou.aliyuncs.com
+  Region: ${OSS_REGION}
+  Bucket: ${OSS_BUCKET}
+  Endpoint: ${OSS_ENDPOINT}
   AccessKeyId: ${OSS_ACCESS_KEY_ID}
   AccessKeySecret: ${OSS_ACCESS_KEY_SECRET}
-  RoleArn: "acs:ram::1869042830955493:role/aliyunoss"
-  ExternalID: ""
+  RoleArn: ${OSS_ROLE_ARN}
+  ExternalID: ${OSS_EXTERNAL_ID}
   UploadBaseDir: cloud-disk
   StsDurationSeconds: 3600
   PreviewExpireSeconds: 1800
@@ -40,10 +40,10 @@ JWT:
   RefreshExpire: 7200
 Mail:
   From: ${MAIL_FROM}
-  Host: smtp.163.com:465
+  Host: ${MAIL_HOST}
   Username: ${MAIL_USERNAME}
   Password: ${MAIL_PASSWORD}
-  ServerName: smtp.163.com
+  ServerName: ${MAIL_SERVER_NAME}
   CodeExpire: 300
   CodeLen: 6
 CORS:
