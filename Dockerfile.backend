@@ -1,0 +1,29 @@
+FROM golang:1.25-bookworm AS builder
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY core ./core
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/cloud-disk ./core
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/core
+
+COPY --from=builder /out/cloud-disk ./cloud-disk
+COPY core/etc ./etc
+COPY core/internal/authorization ./internal/authorization
+
+RUN mkdir -p logs
+
+EXPOSE 8888
+
+CMD ["./cloud-disk", "-f", "etc/core-api.yaml"]
+
